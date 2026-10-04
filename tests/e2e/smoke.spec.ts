@@ -141,6 +141,97 @@ test("persists ChatGPT Fast mode and can restore standard speed", async ({
   }
 });
 
+test("settings stay readable across tabs, narrow windows and dark mode", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker, extensionId } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, { uiLanguage: "zh-CN" });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await expect(page.getByLabel("界面语言", { exact: true })).toHaveCSS(
+      "font-size",
+      "16px",
+    );
+    await expect(page.getByLabel("译文字号缩放", { exact: true })).toHaveCSS(
+      "min-height",
+      "46px",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("settings-desktop.png"),
+      fullPage: true,
+    });
+    await page.getByRole("tab", { name: "翻译服务", exact: true }).click();
+    await expect(page).toHaveURL(/#services$/);
+    await page.reload();
+    await expect(
+      page.getByRole("tab", { name: "翻译服务", exact: true }),
+    ).toHaveAttribute("aria-selected", "true");
+    await page.getByLabel("选择服务", { exact: true }).selectOption("chatgpt");
+    await expect(
+      page.getByRole("button", { name: "登录 ChatGPT", exact: true }),
+    ).toBeEnabled();
+    const modelHeight = await page
+      .getByLabel("模型", { exact: true })
+      .evaluate((el) => el.getBoundingClientRect().height);
+    expect(modelHeight).toBeGreaterThanOrEqual(44);
+    expect(modelHeight).toBeLessThan(50);
+    await expect(page.getByLabel("系统提示词", { exact: true })).toHaveCSS(
+      "min-height",
+      "160px",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("settings-services.png"),
+      fullPage: true,
+    });
+    const basic = page.getByRole("tab", { name: "基本", exact: true });
+    await basic.focus();
+    await basic.press("End");
+    await expect(page).toHaveURL(/#data$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/#services$/);
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const name of [
+      "基本",
+      "翻译服务",
+      "输入框 / 划词 / 悬停",
+      "站点规则",
+      "术语表",
+      "快捷键",
+      "缓存 / 导入导出",
+    ]) {
+      await page.getByRole("tab", { name, exact: true }).click();
+      await expect(page.getByRole("tabpanel")).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+    }
+    await basic.click();
+    await page.screenshot({
+      path: testInfo.outputPath("settings-mobile.png"),
+      fullPage: true,
+    });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.setViewportSize({ width: 1440, height: 1080 });
+    await expect(page.locator("body")).toHaveCSS(
+      "background-color",
+      "rgb(23, 30, 27)",
+    );
+    await page.screenshot({
+      path: testInfo.outputPath("settings-dark.png"),
+      fullPage: true,
+    });
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 async function launchExtension(
   playwright: {
     chromium: BrowserType;

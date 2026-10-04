@@ -67,6 +67,84 @@ afterEach(() => {
 });
 
 describe("Options", () => {
+  it("persists the active tab in the URL and supports keyboard navigation", async () => {
+    render(<Options />);
+    await screen.findByRole("heading", { name: "基本", level: 2 });
+    fireEvent.click(screen.getByRole("tab", { name: "翻译服务" }));
+    expect(window.location.hash).toBe("#services");
+    fireEvent.keyDown(screen.getByRole("tab", { name: "翻译服务" }), {
+      key: "ArrowDown",
+    });
+    expect(window.location.hash).toBe("#features");
+    expect(document.activeElement).toBe(
+      screen.getByRole("tab", { name: "输入框 / 划词 / 悬停" }),
+    );
+    cleanup();
+    render(<Options />);
+    await screen.findByRole("heading", {
+      name: "输入框 / 划词 / 悬停",
+      level: 2,
+    });
+    expect(
+      screen
+        .getByRole("tab", { name: "输入框 / 划词 / 悬停" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
+  });
+
+  it("shows saving and save errors for fire-and-forget settings changes", async () => {
+    let rejectSave!: (error: Error) => void;
+    browserMock.storage.local.set.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    window.history.replaceState(null, "", "/#data");
+    render(<Options />);
+    const toggle = await screen.findByRole("checkbox", {
+      name: "自动保存网页翻译记录",
+    });
+    fireEvent.click(toggle);
+    await screen.findByText("正在保存…");
+    await waitFor(() => expect(rejectSave).toBeTypeOf("function"));
+    rejectSave(new Error("Storage unavailable"));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "保存失败",
+    );
+  });
+
+  it("does not let a slow initial model request overwrite a manual refresh", async () => {
+    let resolveInitial!: (models: string[]) => void;
+    browserMock.runtime.sendMessage.mockImplementation(
+      (message: { type: string; force?: boolean }) => {
+        if (message.type === "chatgptOauth.status")
+          return Promise.resolve({ state: "logged_out" });
+        if (message.type === "chatgptOauth.models")
+          return message.force
+            ? Promise.resolve(["new-model"])
+            : new Promise((resolve) => {
+                resolveInitial = resolve;
+              });
+      },
+    );
+    render(<Options />);
+    await screen.findByRole("heading", { name: "基本", level: 2 });
+    fireEvent.click(screen.getByRole("tab", { name: "翻译服务" }));
+    fireEvent.change(screen.getByLabelText("选择服务"), {
+      target: { value: "chatgpt" },
+    });
+    await waitFor(() => expect(resolveInitial).toBeTypeOf("function"));
+    fireEvent.click(screen.getByRole("button", { name: "刷新模型列表" }));
+    await waitFor(() =>
+      expect(document.querySelector('option[value="new-model"]')).toBeTruthy(),
+    );
+    resolveInitial(["old-model"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.querySelector('option[value="old-model"]')).toBeNull();
+    expect(document.querySelector('option[value="new-model"]')).toBeTruthy();
+  });
   it("persists translation font size, previews it and restores inheritance", async () => {
     stored.translationFontSize = "120%";
     render(<Options />);
@@ -351,6 +429,30 @@ describe("Options", () => {
     expect(screen.getByText("从 Codex CLI 导入")).toBeTruthy();
   });
 
+  it("enables ChatGPT after an explicit login succeeds", async () => {
+    browserMock.runtime.sendMessage.mockImplementation(
+      async (message: { type: string }) => {
+        if (message.type === "chatgptOauth.status")
+          return { state: "logged_out" };
+        if (message.type === "chatgptOauth.start")
+          return { state: "authenticated", account: { planType: "plus" } };
+      },
+    );
+    render(<Options />);
+    await screen.findByRole("heading", { name: "基本", level: 2 });
+    fireEvent.click(screen.getByRole("tab", { name: "翻译服务" }));
+    fireEvent.change(screen.getByLabelText("选择服务"), {
+      target: { value: "chatgpt" },
+    });
+    const login = await screen.findByRole("button", { name: "登录 ChatGPT" });
+    await waitFor(() =>
+      expect((login as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(login);
+    await waitFor(() => expect(stored.services.chatgpt?.enabled).toBe(true));
+    expect(screen.getByRole("button", { name: "退出登录" })).toBeTruthy();
+  });
+
   it("writes ChatGPT reasoning settings and hides unsupported max options", async () => {
     stored.services.chatgpt = {
       ...stored.services.chatgpt!,
@@ -465,6 +567,8 @@ describe("Options", () => {
     expect(await screen.findByText("reader@example.com")).toBeTruthy();
     expect(screen.getByText("plus")).toBeTruthy();
     expect(screen.getByRole("button", { name: "退出登录" })).toBeTruthy();
+    expect(stored.services.chatgpt?.enabled).toBe(false);
+    expect(browserMock.storage.local.set).not.toHaveBeenCalled();
   });
 
   it("shows a ChatGPT OAuth error with a retry action", async () => {

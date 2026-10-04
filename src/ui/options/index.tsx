@@ -79,9 +79,50 @@ function tabFromHash(): TabId {
   return tabs.some((tab) => tab.id === candidate) ? candidate : "basic";
 }
 
+function SettingsIcon({ tab }: { tab: TabId }): preact.JSX.Element {
+  const paths: Record<TabId, string> = {
+    basic: "M4 7h16M4 17h16M8 4v6M16 14v6",
+    services: "M8 4v5m8-5v5M6 9h12v3a6 6 0 0 1-12 0V9Zm6 9v3",
+    features: "m5 3 14 9-7 1-3 7L5 3Z",
+    rules: "M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Zm-4 9 3 3 5-6",
+    glossary: "M4 4h6l2 2 2-2h6v15h-6l-2 2-2-2H4V4Zm8 2v15",
+    shortcuts: "M3 6h18v12H3V6Zm4 4h1m3 0h1m3 0h2M7 14h10",
+    data: "M4 5h16v4H4V5Zm1 4v11h14V9M9 13h6",
+  };
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.7"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <path d={paths[tab]} />
+    </svg>
+  );
+}
+
 export function Options(): preact.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabId>(tabFromHash);
   const { config, error, updateConfig } = useKConfig();
+  const [pendingSaves, setPendingSaves] = useState(0);
+  const saveChanges: KConfigUpdater = (patch) => {
+    setPendingSaves((count) => count + 1);
+    const operation = updateConfig(patch).finally(() =>
+      setPendingSaves((count) => count - 1),
+    );
+    // Fire-and-forget form handlers still report failures in the page header.
+    void operation.catch(() => {});
+    return operation;
+  };
+  const selectTab = (tab: TabId): void => {
+    setActiveTab(tab);
+    if (window.location.hash !== `#${tab}`) window.location.hash = tab;
+  };
 
   useEffect(() => {
     const updateFromHash = (): void => setActiveTab(tabFromHash());
@@ -104,8 +145,21 @@ export function Options(): preact.JSX.Element {
   return (
     <main class="options-shell">
       <aside class="options-sidebar">
-        <h1>{t("options.title")}</h1>
-        <nav role="tablist" aria-label={t("options.title")}>
+        <div class="options-brand">
+          <span class="options-brand-mark" aria-hidden="true">
+            译
+          </span>
+          <div>
+            <h1>{t("app.name")}</h1>
+            <span>Open Immersive Translate</span>
+          </div>
+        </div>
+        <p class="options-nav-label">{t("options.title")}</p>
+        <nav
+          role="tablist"
+          aria-label={t("options.title")}
+          aria-orientation="vertical"
+        >
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -114,12 +168,33 @@ export function Options(): preact.JSX.Element {
               role="tab"
               aria-selected={activeTab === tab.id}
               aria-controls={`panel-${tab.id}`}
-              onClick={() => setActiveTab(tab.id)}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => selectTab(tab.id)}
+              onKeyDown={(event) => {
+                const index = tabs.findIndex((item) => item.id === tab.id);
+                const nextIndex =
+                  event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? tabs.length - 1
+                      : ["ArrowDown", "ArrowRight"].includes(event.key)
+                        ? (index + 1) % tabs.length
+                        : ["ArrowUp", "ArrowLeft"].includes(event.key)
+                          ? (index + tabs.length - 1) % tabs.length
+                          : undefined;
+                if (nextIndex === undefined) return;
+                event.preventDefault();
+                const next = tabs[nextIndex]!;
+                selectTab(next.id);
+                document.getElementById(`tab-${next.id}`)?.focus();
+              }}
             >
-              {t(tab.label)}
+              <SettingsIcon tab={tab.id} />
+              <span>{t(tab.label)}</span>
             </button>
           ))}
         </nav>
+        <p class="options-sidebar-note">{t("options.localSettings")}</p>
       </aside>
 
       <div
@@ -129,31 +204,42 @@ export function Options(): preact.JSX.Element {
         aria-labelledby={`tab-${activeTab}`}
       >
         <header class="options-content-header">
-          <h2>{t(tabs.find((tab) => tab.id === activeTab)!.label)}</h2>
-          {error && (
-            <p role="alert" class="ui-status ui-status-error">
-              {t("common.saveFailed")}
-            </p>
-          )}
+          <div>
+            <h2>{t(tabs.find((tab) => tab.id === activeTab)!.label)}</h2>
+            <p>{t(`options.description.${activeTab}` as I18nKey)}</p>
+          </div>
+          <p
+            role={error ? "alert" : "status"}
+            class={`options-save-status ${error ? "ui-status-error" : ""}`}
+          >
+            <span aria-hidden="true" />
+            {t(
+              error
+                ? "common.saveFailed"
+                : pendingSaves
+                  ? "options.saving"
+                  : "options.autoSave",
+            )}
+          </p>
         </header>
         {activeTab === "basic" && (
-          <BasicPanel config={config} onPatch={updateConfig} />
+          <BasicPanel config={config} onPatch={saveChanges} />
         )}
         {activeTab === "services" && (
-          <ServicesPanel config={config} onPatch={updateConfig} />
+          <ServicesPanel config={config} onPatch={saveChanges} />
         )}
         {activeTab === "features" && (
-          <FeaturesPanel config={config} onPatch={updateConfig} />
+          <FeaturesPanel config={config} onPatch={saveChanges} />
         )}
         {activeTab === "rules" && (
-          <RulesPanel config={config} onPatch={updateConfig} />
+          <RulesPanel config={config} onPatch={saveChanges} />
         )}
         {activeTab === "glossary" && (
-          <GlossaryPanel config={config} onPatch={updateConfig} />
+          <GlossaryPanel config={config} onPatch={saveChanges} />
         )}
         {activeTab === "shortcuts" && <ShortcutsPanel />}
         {activeTab === "data" && (
-          <DataPanel config={config} onPatch={updateConfig} />
+          <DataPanel config={config} onPatch={saveChanges} />
         )}
       </div>
     </main>
@@ -239,7 +325,11 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
             />
           </Field>
         </div>
-        <div class="segmented options-segmented" role="group">
+        <div
+          class="segmented options-segmented"
+          role="group"
+          aria-label={t("popup.mode")}
+        >
           {(["dual", "translation"] as const).map((mode) => (
             <button
               key={mode}
@@ -274,48 +364,56 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
             </button>
           ))}
         </div>
-        <p
-          class={`theme-preview theme-${config.theme}`}
-          style={{
-            fontFamily: config.font || "inherit",
-            fontSize: fontSize || "inherit",
-          }}
-        >
-          {t("basic.themePreview")}
-        </p>
-        <Field label={t("basic.font")} htmlFor="translation-font">
-          <Select
-            id="translation-font"
-            value={config.font || ""}
-            options={[
-              { value: "", label: t("basic.followPageFont") },
-              { value: "system-ui", label: t("basic.systemFont") },
-              { value: "PingFang SC", label: t("basic.chineseFont") },
-              { value: "serif", label: t("basic.serifFont") },
-              { value: "monospace", label: t("basic.monospaceFont") },
-            ]}
-            onChange={(font) => save(onPatch, { font: font || undefined })}
-          />
-        </Field>
-        <Field
-          label={t("basic.fontSize")}
-          htmlFor="translation-font-size-preset"
-          hint={t("basic.fontSizeHint")}
-        >
-          <Select
-            id="translation-font-size-preset"
-            value={fontSize}
-            options={fontSizes.map((value) => ({
-              value,
-              label: value === "100%" ? t("basic.followSourceSize") : value,
-            }))}
-            onChange={(value) =>
-              save(onPatch, {
-                translationFontSize: value === "100%" ? undefined : value,
-              })
-            }
-          />
-        </Field>
+        <div class="options-preview">
+          <span class="options-preview-label">{t("options.preview")}</span>
+          <p class="options-preview-source" lang="en">
+            Read the world in your own language.
+          </p>
+          <p
+            class={`theme-preview theme-${config.theme}`}
+            style={{
+              fontFamily: config.font || "inherit",
+              fontSize: fontSize || "inherit",
+            }}
+          >
+            {t("basic.themePreview")}
+          </p>
+        </div>
+        <div class="form-grid two-columns options-typography">
+          <Field label={t("basic.font")} htmlFor="translation-font">
+            <Select
+              id="translation-font"
+              value={config.font || ""}
+              options={[
+                { value: "", label: t("basic.followPageFont") },
+                { value: "system-ui", label: t("basic.systemFont") },
+                { value: "PingFang SC", label: t("basic.chineseFont") },
+                { value: "serif", label: t("basic.serifFont") },
+                { value: "monospace", label: t("basic.monospaceFont") },
+              ]}
+              onChange={(font) => save(onPatch, { font: font || undefined })}
+            />
+          </Field>
+          <Field
+            label={t("basic.fontSize")}
+            htmlFor="translation-font-size-preset"
+            hint={t("basic.fontSizeHint")}
+          >
+            <Select
+              id="translation-font-size-preset"
+              value={fontSize}
+              options={fontSizes.map((value) => ({
+                value,
+                label: value === "100%" ? t("basic.followSourceSize") : value,
+              }))}
+              onChange={(value) =>
+                save(onPatch, {
+                  translationFontSize: value === "100%" ? undefined : value,
+                })
+              }
+            />
+          </Field>
+        </div>
       </Card>
 
       <Card title={t("basic.floatBall")}>
@@ -411,21 +509,24 @@ function ServiceCard({
   const [accountModels, setAccountModels] = useState<readonly string[]>();
   const [refreshingModels, setRefreshingModels] = useState(false);
   const [modelError, setModelError] = useState<string>();
+  const modelRequest = useRef(0);
   useEffect(() => {
-    let active = true;
+    const request = ++modelRequest.current;
     setAccountModels(undefined);
     if (service.kind === "chatgpt") {
       void sendToBackground({ type: "chatgptOauth.models" })
         .then((models) => {
-          if (active && Array.isArray(models)) setAccountModels(models);
+          if (request === modelRequest.current && Array.isArray(models))
+            setAccountModels(models);
         })
         .catch(() => {});
     }
     return () => {
-      active = false;
+      modelRequest.current += 1;
     };
   }, [serviceId, service.kind]);
   const refreshModels = async (): Promise<void> => {
+    const request = ++modelRequest.current;
     setRefreshingModels(true);
     setModelError(undefined);
     try {
@@ -434,15 +535,16 @@ function ServiceCard({
         force: true,
       });
       if (!models?.length) throw new Error(t("services.modelsUnavailable"));
-      setAccountModels(models);
+      if (request === modelRequest.current) setAccountModels(models);
     } catch (error) {
-      setModelError(
-        error instanceof Error
-          ? error.message
-          : t("services.modelsUnavailable"),
-      );
+      if (request === modelRequest.current)
+        setModelError(
+          error instanceof Error
+            ? error.message
+            : t("services.modelsUnavailable"),
+        );
     } finally {
-      setRefreshingModels(false);
+      if (request === modelRequest.current) setRefreshingModels(false);
     }
   };
   const pairSupported = serviceSupportsPair(serviceId, service, from, to);
@@ -796,16 +898,24 @@ function ChatgptOauthField({
   const [importOpen, setImportOpen] = useState(false);
   const [importJson, setImportJson] = useState("");
   const [actionError, setActionError] = useState<string>();
-  const enabledForSession = useRef(false);
+  const previousAuthState = useRef<ChatgptOauthStatus["state"]>();
+  const acceptStatus = (
+    next: ChatgptOauthStatus,
+    completedAction = false,
+  ): void => {
+    setStatus(next);
+    if (
+      next.state === "authenticated" &&
+      (completedAction || previousAuthState.current === "pending")
+    )
+      onAuthChange(true);
+    previousAuthState.current = next.state;
+  };
 
   const loadStatus = async (): Promise<void> => {
     try {
       const next = await sendToBackground({ type: "chatgptOauth.status" });
-      setStatus(next);
-      if (next.state === "authenticated" && !enabledForSession.current) {
-        enabledForSession.current = true;
-        onAuthChange(true);
-      }
+      acceptStatus(next);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : t("oauth.statusFailed"),
@@ -819,11 +929,7 @@ function ChatgptOauthField({
       void sendToBackground({ type: "chatgptOauth.status" })
         .then((next) => {
           if (disposed) return;
-          setStatus(next);
-          if (next.state === "authenticated" && !enabledForSession.current) {
-            enabledForSession.current = true;
-            onAuthChange(true);
-          }
+          acceptStatus(next);
         })
         .catch((error: unknown) => {
           if (!disposed) {
@@ -848,11 +954,7 @@ function ChatgptOauthField({
     setActionError(undefined);
     try {
       const next = await action();
-      setStatus(next);
-      if (next.state === "authenticated") {
-        enabledForSession.current = true;
-        onAuthChange(true);
-      }
+      acceptStatus(next, true);
     } catch (error) {
       setActionError(
         error instanceof Error ? error.message : t("common.failed"),
@@ -941,7 +1043,7 @@ function ChatgptOauthField({
                 const next = await sendToBackground({
                   type: "chatgptOauth.logout",
                 });
-                enabledForSession.current = false;
+                previousAuthState.current = "logged_out";
                 onAuthChange(false);
                 return next;
               });
@@ -1629,7 +1731,7 @@ function save(
     | Partial<Omit<KConfig, "version">>
     | ((config: KConfig) => Partial<Omit<KConfig, "version">>),
 ): void {
-  void update(patch).catch(console.error);
+  void update(patch).catch(() => {});
 }
 
 const root = document.getElementById("app");
