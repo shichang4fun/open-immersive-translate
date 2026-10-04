@@ -14,12 +14,24 @@ describe("configuration migration", () => {
     expect(serviceConfigSchema.parse({ kind: "chatgpt" })).toMatchObject({
       reasoningEffort: "low",
       reasoningEffortAssistant: "medium",
+      serviceTier: "default",
     });
     expect(() =>
       serviceConfigSchema.parse({
         kind: "chatgpt",
         reasoningEffort: "minimal",
       }),
+    ).toThrow();
+  });
+
+  it("preserves Fast through config migration and rejects invalid tiers", () => {
+    const config = migrateConfig({
+      ...DEFAULT_CONFIG,
+      services: { chatgpt: { kind: "chatgpt", serviceTier: "fast" } },
+    });
+    expect(config.services.chatgpt?.serviceTier).toBe("fast");
+    expect(() =>
+      serviceConfigSchema.parse({ kind: "chatgpt", serviceTier: "invalid" }),
     ).toThrow();
   });
 
@@ -67,6 +79,7 @@ describe("configuration migration", () => {
       enabled: false,
       reasoningEffort: "low",
       reasoningEffortAssistant: "medium",
+      serviceTier: "default",
     });
     expect(migrated.shortcuts.toggleTranslatePage).toBe("Alt+Q");
     expect(migrated.subtitle).toMatchObject({

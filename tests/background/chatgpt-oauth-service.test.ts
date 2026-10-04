@@ -21,6 +21,7 @@ const browserMock = vi.hoisted(() => ({
 vi.mock("webextension-polyfill", () => ({ default: browserMock }));
 
 import { readSse } from "../../src/background/services/stream";
+import { createService } from "../../src/background/services";
 import {
   CHATGPT_AUTH_STORAGE_KEY,
   type ChatgptOauthTokens,
@@ -202,6 +203,7 @@ describe("ChatgptOauthService", () => {
     expect(body).toMatchObject({
       model: "gpt-5.4-mini",
       reasoning: { effort: "low" },
+      service_tier: "default",
       store: false,
       stream: true,
     });
@@ -239,10 +241,12 @@ describe("ChatgptOauthService", () => {
         ]),
       );
     vi.stubGlobal("fetch", fetchMock);
-    const service = new ChatgptOauthService({
+    const service = createService("chatgpt", {
+      kind: "chatgpt",
       model: "gpt-5.5",
       reasoningEffort: "max",
       reasoningEffortAssistant: "high",
+      serviceTier: "fast",
     });
     const signal = new AbortController().signal;
 
@@ -250,7 +254,7 @@ describe("ChatgptOauthService", () => {
       { texts: ["Hello"], from: "en", to: "zh-CN" },
       signal,
     );
-    await service.completePrompt(
+    await service.completePrompt!(
       { kind: "chat", text: "Hello", service: "chatgpt" },
       signal,
     );
@@ -263,6 +267,35 @@ describe("ChatgptOauthService", () => {
     ) as Record<string, unknown>;
     expect(translationBody.reasoning).toEqual({ effort: "xhigh" });
     expect(assistantBody.reasoning).toEqual({ effort: "high" });
+    expect(translationBody.service_tier).toBe("priority");
+    expect(assistantBody.service_tier).toBe("priority");
+  });
+
+  it("reports unsupported Fast requests without silently retrying in standard mode", async () => {
+    state.stored[CHATGPT_AUTH_STORAGE_KEY] = {
+      tokens: storedTokens(
+        jwt({ exp: Math.floor(Date.now() / 1_000) + 3_600 }),
+      ),
+    };
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ error: { message: "Fast unavailable" } }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const service = new ChatgptOauthService({
+      model: "gpt-5.5",
+      serviceTier: "fast",
+    });
+    await expect(
+      service.translate(
+        { texts: ["Hello"], from: "en", to: "zh-CN" },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("refreshes once after a 401 and retries with the new token", async () => {
@@ -297,7 +330,10 @@ describe("ChatgptOauthService", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const service = new ChatgptOauthService({ model: "gpt-5.4-mini" });
+    const service = new ChatgptOauthService({
+      model: "gpt-5.4-mini",
+      serviceTier: "fast",
+    });
     await expect(
       service.translate(
         { texts: ["Hello"], from: "en", to: "zh-CN" },
@@ -311,6 +347,12 @@ describe("ChatgptOauthService", () => {
     >;
     expect(thirdHeaders.Authorization).toBe(`Bearer ${newAccess}`);
     expect(thirdHeaders["ChatGPT-Account-ID"]).toBe("acct-new");
+    expect(fetchMock.mock.calls[2]?.[1]?.body).toBe(
+      fetchMock.mock.calls[0]?.[1]?.body,
+    );
+    expect(
+      JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body)).service_tier,
+    ).toBe("priority");
   });
 
   it("does not refresh twice after repeated 401 responses", async () => {

@@ -228,6 +228,7 @@ export interface ServiceConfig {
   stream?: boolean;
   reasoningEffort?: ReasoningEffort;
   reasoningEffortAssistant?: ReasoningEffort;
+  serviceTier?: "default" | "fast";
 }
 
 /** How source and translated text are displayed. */

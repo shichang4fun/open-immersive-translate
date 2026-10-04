@@ -28,6 +28,7 @@ const zhCN = {
   responseJsonPath: "响应 JSON 路径",
   reasoningEffort: "翻译思考强度",
   reasoningEffortAssistant: "助手思考强度",
+  serviceTier: "请求速度",
 } as const;
 
 export type ServiceI18nKey = keyof typeof zhCN;
@@ -60,6 +61,7 @@ const en: Record<ServiceI18nKey, string> = {
   responseJsonPath: "Response JSON path",
   reasoningEffort: "Translation reasoning effort",
   reasoningEffortAssistant: "Assistant reasoning effort",
+  serviceTier: "Request speed",
 };
 
 export function serviceText(

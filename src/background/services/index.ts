@@ -93,6 +93,7 @@ export function createService(
         ignoreResRegexs: config.ignoreResRegexs,
         reasoningEffort: config.reasoningEffort,
         reasoningEffortAssistant: config.reasoningEffortAssistant,
+        serviceTier: config.serviceTier,
       });
     case "claude":
       return new ClaudeService({

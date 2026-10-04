@@ -636,6 +636,7 @@ function serviceFieldValue(
 ): string {
   if (key === "auth") return "";
   if (key === "reasoningEffort") return service.reasoningEffort ?? "low";
+  if (key === "serviceTier") return service.serviceTier ?? "default";
   if (key === "reasoningEffortAssistant") {
     return service.reasoningEffortAssistant ?? "medium";
   }

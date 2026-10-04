@@ -65,6 +65,7 @@ export interface ChatgptServiceOptions {
   rateLimit?: Partial<RateLimit>;
   reasoningEffort?: ReasoningEffort;
   reasoningEffortAssistant?: ReasoningEffort;
+  serviceTier?: "default" | "fast";
 }
 
 interface ModelCache {
@@ -266,6 +267,7 @@ export class ChatgptOauthService extends BaseService {
   private readonly promptUser?: string;
   private readonly reasoningEffort: ReasoningEffort;
   private readonly reasoningEffortAssistant: ReasoningEffort;
+  private readonly serviceTier: "default" | "fast";
   private readonly timeoutMs: number;
   private readonly refusalPatterns: RegExp[];
   readonly onPartial: (
@@ -287,6 +289,7 @@ export class ChatgptOauthService extends BaseService {
       placeholder: { open: "{", close: "}" },
     });
     this.model = options.model;
+    this.serviceTier = options.serviceTier ?? "default";
     this.promptSystem = options.promptSystem ?? options.prompt;
     this.promptUser = options.promptUser;
     this.reasoningEffort = options.reasoningEffort ?? "low";
@@ -306,13 +309,18 @@ export class ChatgptOauthService extends BaseService {
     body: Record<string, unknown>,
     signal: AbortSignal,
   ): Promise<Response> {
+    const requestBody = JSON.stringify({
+      ...body,
+      // The Codex OAuth endpoint accepts the legacy Fast name, not "fast".
+      service_tier: this.serviceTier === "fast" ? "priority" : "default",
+    });
     let tokens = await getValidChatgptOauthTokens();
     let response = await fetchWithTimeout(
       CODEX_RESPONSES_URL,
       {
         method: "POST",
         headers: buildChatgptHeaders(tokens),
-        body: JSON.stringify(body),
+        body: requestBody,
       },
       signal,
       this.timeoutMs,
@@ -325,7 +333,7 @@ export class ChatgptOauthService extends BaseService {
         {
           method: "POST",
           headers: buildChatgptHeaders(tokens),
-          body: JSON.stringify(body),
+          body: requestBody,
         },
         signal,
         this.timeoutMs,

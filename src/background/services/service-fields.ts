@@ -96,6 +96,7 @@ function fieldType(name: ServiceFieldName): ServiceFieldType {
   if (name === "stream") return "checkbox";
   if (
     name === "formality" ||
+    name === "serviceTier" ||
     name === "reasoningEffort" ||
     name === "reasoningEffortAssistant"
   )
@@ -158,6 +159,7 @@ export function serviceFields(
     return [
       "auth",
       "model",
+      "serviceTier",
       "reasoningEffort",
       "reasoningEffortAssistant",
       "promptSystem",
@@ -173,6 +175,19 @@ export function serviceFields(
           ? "ChatGPT OAuth"
           : serviceText(name as ServiceI18nKey, locale),
       type: fieldType(name as ServiceFieldName),
+      ...(name === "serviceTier"
+        ? {
+            options: ["default", "fast"],
+            optionLabels:
+              locale === "en"
+                ? { default: "Standard", fast: "Fast" }
+                : { default: "标准", fast: "Fast（加速）" },
+            hint:
+              locale === "en"
+                ? "Applies to translation and assistant requests. Fast uses your plan or credits faster; availability depends on the model and account. The server may fall back to standard speed."
+                : "同时用于翻译和助手。Fast 会更快消耗订阅额度或积分；是否可用取决于模型和账号，服务端可能回退到标准速度。",
+          }
+        : {}),
       ...(name === "model"
         ? { options: getModels(serviceId), allowCustom: true }
         : {}),

@@ -319,6 +319,12 @@ describe("Options", () => {
 
     const translationEffort = await screen.findByLabelText("翻译思考强度");
     const assistantEffort = screen.getByLabelText("助手思考强度");
+    const speed = screen.getByLabelText("请求速度");
+    expect((speed as HTMLSelectElement).value).toBe("default");
+    fireEvent.change(speed, { target: { value: "fast" } });
+    await waitFor(() =>
+      expect(stored.services.chatgpt?.serviceTier).toBe("fast"),
+    );
     expect((translationEffort as HTMLSelectElement).value).toBe("xhigh");
     expect(
       within(translationEffort).queryByRole("option", { name: "最大" }),

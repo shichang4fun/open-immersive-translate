@@ -110,6 +110,7 @@ const serviceConfigBaseSchema: z.ZodType<ServiceConfig> = z.object({
   stream: z.boolean().optional(),
   reasoningEffort: reasoningEffortSchema.optional(),
   reasoningEffortAssistant: reasoningEffortSchema.optional(),
+  serviceTier: z.enum(["default", "fast"]).optional(),
 });
 
 export const serviceConfigSchema: z.ZodType<ServiceConfig> = z.preprocess(
@@ -119,6 +120,7 @@ export const serviceConfigSchema: z.ZodType<ServiceConfig> = z.preprocess(
           ...value,
           reasoningEffort: value.reasoningEffort ?? "low",
           reasoningEffortAssistant: value.reasoningEffortAssistant ?? "medium",
+          serviceTier: value.serviceTier ?? "default",
         }
       : value,
   serviceConfigBaseSchema,
@@ -179,6 +181,7 @@ export const DEFAULT_SERVICES: Record<string, ServiceConfig> = {
     enabled: false,
     reasoningEffort: "low",
     reasoningEffortAssistant: "medium",
+    serviceTier: "default",
   },
   claude: { kind: "claude", enabled: false },
   gemini: { kind: "gemini", enabled: false },

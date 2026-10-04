@@ -94,6 +94,53 @@ async function extensionWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker");
 }
 
+test("persists ChatGPT Fast mode and can restore standard speed", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker, extensionId } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, { uiLanguage: "zh-CN" });
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await page.getByRole("tab", { name: "翻译服务", exact: true }).click();
+    await page.getByLabel("选择服务", { exact: true }).selectOption("chatgpt");
+    const speed = page.getByLabel("请求速度", { exact: true });
+    await expect(speed).toHaveValue("default");
+    await speed.selectOption("fast");
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+          const { config } = await api.storage.local.get("config");
+          return (config as { services: { chatgpt: { serviceTier: string } } })
+            .services.chatgpt.serviceTier;
+        }),
+      )
+      .toBe("fast");
+    await page.reload();
+    await page.getByRole("tab", { name: "翻译服务", exact: true }).click();
+    await page.getByLabel("选择服务", { exact: true }).selectOption("chatgpt");
+    await expect(speed).toHaveValue("fast");
+    await page.screenshot({
+      path: testInfo.outputPath("chatgpt-fast.png"),
+      fullPage: true,
+    });
+    await speed.selectOption("default");
+    await expect
+      .poll(() =>
+        page.evaluate(async () => {
+          const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+          const { config } = await api.storage.local.get("config");
+          return (config as { services: { chatgpt: { serviceTier: string } } })
+            .services.chatgpt.serviceTier;
+        }),
+      )
+      .toBe("default");
+  } finally {
+    await context.close();
+  }
+});
+
 async function launchExtension(
   playwright: {
     chromium: BrowserType;
