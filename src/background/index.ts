@@ -52,6 +52,7 @@ import {
 } from "./services";
 import { TranslateError, type TranslationService } from "./services/base";
 import { runServiceTest } from "./service-test";
+import { getChatgptModels } from "./services/chatgpt-oauth/service";
 import {
   cancelChatgptOauth,
   getChatgptOauthStatus,
@@ -237,6 +238,8 @@ browser.runtime.onMessage.addListener(
         return startChatgptOauth();
       case "chatgptOauth.status":
         return getChatgptOauthStatus();
+      case "chatgptOauth.models":
+        return getChatgptModels(request.force);
       case "chatgptOauth.cancel":
         return cancelChatgptOauth();
       case "chatgptOauth.logout":

@@ -34,22 +34,19 @@ import {
   type ChatgptOauthTokens,
 } from "./auth";
 import { clampEffort } from "./reasoning";
+import {
+  CHATGPT_FALLBACK_MODELS,
+  DEFAULT_CHATGPT_MODEL,
+} from "../../../shared/chatgpt-models";
 
 export const CODEX_BASE_URL = "https://chatgpt.com/backend-api/codex";
 export const CODEX_RESPONSES_URL = `${CODEX_BASE_URL}/responses`;
 export const CODEX_MODELS_URL = `${CODEX_BASE_URL}/models?client_version=1.0.0`;
 export const CHATGPT_MODELS_STORAGE_KEY = "chatgptOauthModels";
-export const DEFAULT_CHATGPT_MODEL = "gpt-5.4-mini";
-export const CHATGPT_FALLBACK_MODELS = [
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "gpt-5.6-luna",
-  "gpt-5.5",
-  "gpt-5.4-mini",
-  "gpt-5.4",
-  "gpt-5.3-codex",
-  "gpt-5.3-codex-spark",
-] as const;
+export {
+  CHATGPT_FALLBACK_MODELS,
+  DEFAULT_CHATGPT_MODEL,
+} from "../../../shared/chatgpt-models";
 
 const MODEL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 
@@ -150,12 +147,15 @@ function parseModels(value: unknown): string[] {
 
 export function selectDefaultChatgptModel(models: readonly string[]): string {
   return (
+    models.find((model) => model === DEFAULT_CHATGPT_MODEL) ??
     models.find(
       (model) =>
-        /^gpt-5(?:\.|-)/.test(model) &&
-        model.includes("mini") &&
+        /^gpt-\d/.test(model) &&
+        (model.includes("mini") || model.includes("luna")) &&
         !model.includes("codex"),
-    ) ?? DEFAULT_CHATGPT_MODEL
+    ) ??
+    models[0] ??
+    DEFAULT_CHATGPT_MODEL
   );
 }
 
@@ -172,6 +172,7 @@ export async function getChatgptModels(
   try {
     const tokens = await getValidChatgptOauthTokens();
     const response = await fetch(CODEX_MODELS_URL, {
+      signal: AbortSignal.timeout(15_000),
       headers: {
         ...buildChatgptHeaders(tokens),
         Accept: "application/json",
@@ -186,7 +187,12 @@ export async function getChatgptModels(
         return models;
       }
     }
-  } catch {
+    if (force)
+      throw new Error(
+        `Unable to refresh ChatGPT models (HTTP ${response.status}).`,
+      );
+  } catch (error) {
+    if (force) throw error;
     // A cached or static catalog keeps translation usable during probe errors.
   }
   return cached?.models ?? CHATGPT_FALLBACK_MODELS;

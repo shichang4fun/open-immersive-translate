@@ -341,6 +341,61 @@ test("translates article paragraphs once and restores the DOM", async ({
   }
 });
 
+test("updates translation font size from settings without changing the source", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker, extensionId } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, { uiLanguage: "zh-CN" });
+    const article = await context.newPage();
+    await article.goto(`${origin}/article.html`);
+    const sourceSize = await article
+      .locator("#first")
+      .evaluate((el) => getComputedStyle(el).fontSize);
+    await expect
+      .poll(() => contentState(worker))
+      .toMatchObject({ ready: true });
+    await expect.poll(() => toggleActivePage(worker)).toBe(true);
+    const target = article.locator("#first font[data-imt='target']");
+    await expect(target).toContainText("[zh]");
+    const settings = await context.newPage();
+    await settings.goto(`chrome-extension://${extensionId}/options.html`);
+    const size = settings.getByLabel("译文字号", { exact: true });
+    await size.selectOption("24px");
+    await expect(target).toHaveCSS("font-size", "24px");
+    await expect(article.locator("#first")).toHaveCSS("font-size", sourceSize);
+    await expect(settings.getByText("这是译文样式预览")).toHaveCSS(
+      "font-size",
+      "24px",
+    );
+    await settings.reload();
+    await expect(size).toHaveValue("24px");
+    await settings.screenshot({
+      path: testInfo.outputPath("translation-font-size.png"),
+      fullPage: true,
+    });
+    await article.screenshot({
+      path: testInfo.outputPath("translation-font-size-page.png"),
+      fullPage: true,
+    });
+    await size.selectOption("");
+    await expect(target).toHaveCSS("font-size", sourceSize);
+    await expect(article.locator("#first")).toHaveCSS("font-size", sourceSize);
+    await settings.getByRole("tab", { name: "翻译服务", exact: true }).click();
+    await settings
+      .getByLabel("选择服务", { exact: true })
+      .selectOption("chatgpt");
+    await expect(
+      settings.locator('#chatgpt-model-models option[value="gpt-6.1-sol"]'),
+    ).toHaveCount(1);
+    await expect(
+      settings.getByRole("button", { name: "刷新模型列表" }),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
 test("exports a weekly archive from a background alarm without a webpage", async ({
   playwright,
 }) => {

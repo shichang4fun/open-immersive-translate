@@ -1,4 +1,5 @@
 import type { Paragraph, Rule, TranslationMode } from "../../shared/types";
+import { translationFontSize } from "../../shared/typography";
 
 import themeCss from "./themes.css?raw";
 
@@ -299,7 +300,7 @@ export function applyTargetStyle(
 ): void {
   const values: Array<[string, string | undefined]> = [
     ["--imt-target-font", cssValue(options.font)],
-    ["--imt-target-font-size", cssValue(options.fontSize, "px")],
+    ["--imt-target-font-size", translationFontSize(options.fontSize)],
     ["--imt-target-color", cssValue(options.color)],
     ["--imt-target-line-height", cssValue(options.lineHeight)],
   ];
@@ -433,7 +434,10 @@ export function setMode(
 }
 
 /** Toggle learning-mode blur without changing the selected translation theme. */
-export function setMask(root: Document | ShadowRoot | Element, enabled: boolean): void {
+export function setMask(
+  root: Document | ShadowRoot | Element,
+  enabled: boolean,
+): void {
   const element =
     root instanceof Document
       ? root.documentElement

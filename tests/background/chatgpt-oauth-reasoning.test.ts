@@ -38,4 +38,19 @@ describe("ChatGPT reasoning effort", () => {
     expect(supportedEfforts("gpt-5.6-terra")).toContain("max");
     expect(supportedEfforts("gpt-5.5")).not.toContain("max");
   });
+
+  it.each(["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-6-luna"])(
+    "supports the current OAuth reasoning levels for %s",
+    (model) => {
+      expect(supportedEfforts(model)).toEqual([
+        "low",
+        "medium",
+        "high",
+        "xhigh",
+        "max",
+      ]);
+      expect(clampEffort("none", model)).toBe("low");
+      expect(clampEffort("max", model)).toBe("max");
+    },
+  );
 });

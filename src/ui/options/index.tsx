@@ -14,6 +14,7 @@ import {
   type ServiceFieldDescriptor,
 } from "../../background/services";
 import { LANGUAGE_CODES } from "../../shared/lang";
+import { translationFontSize } from "../../shared/typography";
 import {
   sendToBackground,
   type ChatgptOauthStatus,
@@ -165,6 +166,19 @@ interface PanelProps {
 }
 
 function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
+  const fontSize = translationFontSize(config.translationFontSize) ?? "";
+  const fontSizes = [
+    "12px",
+    "14px",
+    "16px",
+    "18px",
+    "20px",
+    "22px",
+    "24px",
+    "28px",
+    "32px",
+  ];
+  if (fontSize && !fontSizes.includes(fontSize)) fontSizes.push(fontSize);
   const languageOptions = LANGUAGE_CODES.map((code) => ({
     value: code,
     label: languageName(code),
@@ -261,7 +275,10 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
         </div>
         <p
           class={`theme-preview theme-${config.theme}`}
-          style={{ fontFamily: config.font || "inherit" }}
+          style={{
+            fontFamily: config.font || "inherit",
+            fontSize: fontSize || "inherit",
+          }}
         >
           {t("basic.themePreview")}
         </p>
@@ -277,6 +294,23 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
               { value: "monospace", label: t("basic.monospaceFont") },
             ]}
             onChange={(font) => save(onPatch, { font: font || undefined })}
+          />
+        </Field>
+        <Field
+          label={t("basic.fontSize")}
+          htmlFor="translation-font-size-preset"
+          hint={t("basic.fontSizeHint")}
+        >
+          <Select
+            id="translation-font-size-preset"
+            value={fontSize}
+            options={[
+              { value: "", label: t("basic.followSourceSize") },
+              ...fontSizes.map((value) => ({ value, label: value })),
+            ]}
+            onChange={(value) =>
+              save(onPatch, { translationFontSize: value || undefined })
+            }
           />
         </Field>
       </Card>
@@ -371,6 +405,43 @@ function ServiceCard({
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ServiceTestResult>();
+  const [accountModels, setAccountModels] = useState<readonly string[]>();
+  const [refreshingModels, setRefreshingModels] = useState(false);
+  const [modelError, setModelError] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    setAccountModels(undefined);
+    if (service.kind === "chatgpt") {
+      void sendToBackground({ type: "chatgptOauth.models" })
+        .then((models) => {
+          if (active && Array.isArray(models)) setAccountModels(models);
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+    };
+  }, [serviceId, service.kind]);
+  const refreshModels = async (): Promise<void> => {
+    setRefreshingModels(true);
+    setModelError(undefined);
+    try {
+      const models = await sendToBackground({
+        type: "chatgptOauth.models",
+        force: true,
+      });
+      if (!models?.length) throw new Error(t("services.modelsUnavailable"));
+      setAccountModels(models);
+    } catch (error) {
+      setModelError(
+        error instanceof Error
+          ? error.message
+          : t("services.modelsUnavailable"),
+      );
+    } finally {
+      setRefreshingModels(false);
+    }
+  };
   const pairSupported = serviceSupportsPair(serviceId, service, from, to);
 
   const updateService = (patch: Partial<ServiceConfig>): void => {
@@ -432,6 +503,7 @@ function ServiceCard({
             descriptor={field}
             serviceId={serviceId}
             service={service}
+            accountModels={accountModels}
             showKey={showKey}
             onToggleKey={() => setShowKey((value) => !value)}
             onAuthChange={(authenticated) =>
@@ -455,6 +527,23 @@ function ServiceCard({
         ))}
       </div>
       <div class="service-test-row">
+        {service.kind === "chatgpt" && (
+          <Button
+            disabled={refreshingModels}
+            onClick={() => void refreshModels()}
+          >
+            {t(
+              refreshingModels
+                ? "services.refreshingModels"
+                : "services.refreshModels",
+            )}
+          </Button>
+        )}
+        {modelError && (
+          <p role="alert" class="ui-status ui-status-error">
+            {modelError}
+          </p>
+        )}
         <Button disabled={testing} onClick={() => void runTest()}>
           {t(testing ? "services.testing" : "services.test")}
         </Button>
@@ -503,6 +592,7 @@ function ServiceField({
   descriptor,
   serviceId,
   service,
+  accountModels,
   showKey,
   onToggleKey,
   onAuthChange,
@@ -511,6 +601,7 @@ function ServiceField({
   descriptor: ServiceFieldDescriptor;
   serviceId: string;
   service: ServiceConfig;
+  accountModels?: readonly string[];
   showKey: boolean;
   onToggleKey: () => void;
   onAuthChange: (authenticated: boolean) => void;
@@ -588,7 +679,15 @@ function ServiceField({
   }
   const modelOptions =
     descriptor.type === "model"
-      ? getModels(serviceId, service.models)
+      ? accountModels
+        ? [
+            ...new Set([
+              ...accountModels,
+              ...(service.models ?? []),
+              ...(service.model ? [service.model] : []),
+            ]),
+          ]
+        : getModels(serviceId, service.models)
       : undefined;
   const input = (
     <input

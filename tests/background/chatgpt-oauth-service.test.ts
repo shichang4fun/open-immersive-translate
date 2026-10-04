@@ -123,7 +123,12 @@ describe("ChatgptOauthService", () => {
         "gpt-5.4-mini",
       ]),
     ).toBe("gpt-5.6-mini");
-    expect(selectDefaultChatgptModel(["gpt-5.3-codex"])).toBe("gpt-5.4-mini");
+    expect(selectDefaultChatgptModel(["gpt-5.3-codex"])).toBe("gpt-5.3-codex");
+    expect(selectDefaultChatgptModel(["gpt-6.1-sol", "gpt-6-luna"])).toBe(
+      "gpt-6-luna",
+    );
+    expect(selectDefaultChatgptModel(["gpt-6-astra"])).toBe("gpt-6-astra");
+    expect(selectDefaultChatgptModel([])).toBe("gpt-6-luna");
   });
 
   it("probes and caches the account model catalog", async () => {
@@ -219,6 +224,45 @@ describe("ChatgptOauthService", () => {
         ],
       },
     ]);
+  });
+
+  it("forces catalog refresh, filters hidden models, and retains cached results on automatic failure", async () => {
+    state.stored[CHATGPT_MODELS_STORAGE_KEY] = {
+      models: ["old-model"],
+      fetchedAt: Date.now(),
+    };
+    state.stored[CHATGPT_AUTH_STORAGE_KEY] = {
+      tokens: storedTokens(jwt({ exp: Math.floor(Date.now() / 1000) + 3600 })),
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            models: [
+              { slug: "hidden", visibility: "hide" },
+              { slug: "gpt-6-luna", priority: 4 },
+              { slug: "gpt-6.1-sol", priority: 1 },
+              { slug: "gpt-6-luna", priority: 4 },
+            ],
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(getChatgptModels()).resolves.toEqual(["old-model"]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(getChatgptModels(true)).resolves.toEqual([
+      "gpt-6.1-sol",
+      "gpt-6-luna",
+    ]);
+    await expect(getChatgptModels(true)).rejects.toThrow("503");
+    state.stored[CHATGPT_MODELS_STORAGE_KEY] = {
+      models: ["gpt-6-luna"],
+      fetchedAt: 0,
+    };
+    await expect(getChatgptModels()).resolves.toEqual(["gpt-6-luna"]);
   });
 
   it("uses separate configured efforts for translation and assistant requests", async () => {

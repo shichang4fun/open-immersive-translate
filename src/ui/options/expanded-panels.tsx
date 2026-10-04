@@ -459,7 +459,7 @@ export function ExpandedFeatureCards({
           />
           <TextField
             id="translation-font-size"
-            label="译文字号"
+            label="自定义译文字号（例如 18px、120%）"
             value={String(config.translationFontSize ?? "")}
             onChange={(translationFontSize) =>
               void onPatch({

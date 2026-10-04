@@ -16,9 +16,10 @@ const LEGACY_EFFORTS = EFFORT_LADDER.slice(0, -1);
 export function supportedEfforts(
   model: string | undefined,
 ): readonly ReasoningEffort[] {
-  return model?.toLowerCase().includes("gpt-5.6")
-    ? EFFORT_LADDER
-    : LEGACY_EFFORTS;
+  const name = model?.toLowerCase() ?? "";
+  // The current Codex OAuth catalog advertises low through max for GPT-6.
+  if (/^gpt-6(?:\.|-)/.test(name)) return EFFORT_LADDER.slice(1);
+  return name.includes("gpt-5.6") ? EFFORT_LADDER : LEGACY_EFFORTS;
 }
 
 /** Keep a supported level, otherwise use the nearest weaker supported level. */

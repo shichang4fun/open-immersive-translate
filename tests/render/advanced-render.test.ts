@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   injectStyles,
+  applyTargetStyle,
   removeAll,
   renderTranslation,
   setMask,
@@ -17,6 +18,19 @@ afterEach(() => {
 });
 
 describe("advanced translation rendering", () => {
+  it.each([
+    [18, "18px"],
+    ["18", "18px"],
+    [" 22.5 ", "22.5px"],
+    ["120%", "120%"],
+    [undefined, ""],
+  ])("normalizes the translation font size %s", (value, expected) => {
+    const target = document.createElement("font");
+    applyTargetStyle(target, { fontSize: value });
+    expect(target.style.getPropertyValue("--imt-target-font-size")).toBe(
+      expected,
+    );
+  });
   it("defines every phase-3 theme and runtime mask selectors", () => {
     const css = readFileSync("src/content/render/themes.css", "utf8");
     for (const theme of [
@@ -59,17 +73,23 @@ describe("advanced translation rendering", () => {
       },
     });
     expect(target.style.getPropertyValue("--imt-target-font")).toBe("serif");
-    expect(target.style.getPropertyValue("--imt-target-font-size")).toBe("18px");
+    expect(target.style.getPropertyValue("--imt-target-font-size")).toBe(
+      "18px",
+    );
     expect(target.style.getPropertyValue("--imt-target-color")).toBe("#123456");
-    expect(target.style.getPropertyValue("--imt-target-line-height")).toBe("1.8");
+    expect(target.style.getPropertyValue("--imt-target-line-height")).toBe(
+      "1.8",
+    );
   });
 
   it("toggles mask mode and injects a global custom CSS string once", () => {
     setMask(document, true);
-    expect(document.documentElement.classList.contains("imt-translation-mask")).toBe(true);
+    expect(
+      document.documentElement.classList.contains("imt-translation-mask"),
+    ).toBe(true);
     injectStyles(document, ["body { --custom-page-rule: 1; }"]);
-    expect(document.querySelector('style[data-imt="style"]')?.textContent).toContain(
-      "--custom-page-rule: 1",
-    );
+    expect(
+      document.querySelector('style[data-imt="style"]')?.textContent,
+    ).toContain("--custom-page-rule: 1");
   });
 });

@@ -2,6 +2,7 @@ import { serviceText, type ServiceI18nKey, type ServiceUiLocale } from "./i18n";
 import { getPreset } from "./presets";
 import { EFFORT_LADDER } from "./chatgpt-oauth/reasoning";
 import type { ReasoningEffort } from "../../shared/types";
+import { CHATGPT_FALLBACK_MODELS } from "../../shared/chatgpt-models";
 
 export type ServiceFieldName = ServiceI18nKey | "auth";
 export type ServiceFieldType =
@@ -131,16 +132,7 @@ export function getModels(
     claude: ["claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"],
     gemini: ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.5-pro"],
     "azure-openai": ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"],
-    chatgpt: [
-      "gpt-5.6-sol",
-      "gpt-5.6-terra",
-      "gpt-5.6-luna",
-      "gpt-5.5",
-      "gpt-5.4-mini",
-      "gpt-5.4",
-      "gpt-5.3-codex",
-      "gpt-5.3-codex-spark",
-    ],
+    chatgpt: CHATGPT_FALLBACK_MODELS,
   };
   return [
     ...new Set([

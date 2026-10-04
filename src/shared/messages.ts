@@ -150,6 +150,11 @@ export interface ChatgptOauthStatusMessage {
   type: "chatgptOauth.status";
 }
 
+export interface ChatgptModelsMessage {
+  type: "chatgptOauth.models";
+  force?: boolean;
+}
+
 export interface ChatgptOauthCancelMessage {
   type: "chatgptOauth.cancel";
 }
@@ -323,6 +328,7 @@ export type Msg =
   | TestServiceMessage
   | ChatgptOauthStartMessage
   | ChatgptOauthStatusMessage
+  | ChatgptModelsMessage
   | ChatgptOauthCancelMessage
   | ChatgptOauthLogoutMessage
   | ChatgptOauthImportCliMessage
@@ -359,6 +365,7 @@ export type BackgroundRequest =
   | TestServiceMessage
   | ChatgptOauthStartMessage
   | ChatgptOauthStatusMessage
+  | ChatgptModelsMessage
   | ChatgptOauthCancelMessage
   | ChatgptOauthLogoutMessage
   | ChatgptOauthImportCliMessage
@@ -398,8 +405,10 @@ export type BackgroundResponse<T extends BackgroundRequest> =
               ? Config
               : T extends SetConfigMessage
                 ? Config
-                : T extends GetServicesMessage
-                  ? ServiceInfo[]
+                : T extends GetServicesMessage | ChatgptModelsMessage
+                  ? T extends ChatgptModelsMessage
+                    ? readonly string[]
+                    : ServiceInfo[]
                   : T extends TestServiceMessage
                     ? ServiceTestResult
                     : T extends

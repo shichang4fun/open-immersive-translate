@@ -67,6 +67,59 @@ afterEach(() => {
 });
 
 describe("Options", () => {
+  it("persists translation font size, previews it and restores inheritance", async () => {
+    stored.translationFontSize = "120%";
+    render(<Options />);
+    const size = await screen.findByLabelText("译文字号");
+    expect((size as HTMLSelectElement).value).toBe("120%");
+    fireEvent.change(size, { target: { value: "22px" } });
+    await waitFor(() => expect(stored.translationFontSize).toBe("22px"));
+    expect(screen.getByText("这是译文样式预览").style.fontSize).toBe("22px");
+    fireEvent.change(size, { target: { value: "" } });
+    await waitFor(() => expect(stored.translationFontSize).toBeUndefined());
+  });
+
+  it("loads and refreshes account models without overwriting the selected model", async () => {
+    stored.services.chatgpt!.model = "my-current-model";
+    browserMock.runtime.sendMessage.mockImplementation(
+      async (message: { type: string; force?: boolean }) => {
+        if (message.type === "chatgptOauth.status")
+          return { state: "logged_out" };
+        if (message.type === "chatgptOauth.models")
+          return message.force
+            ? ["gpt-6.1-sol", "gpt-6-luna"]
+            : ["cached-model"];
+      },
+    );
+    render(<Options />);
+    await screen.findByRole("heading", { name: "基本", level: 2 });
+    fireEvent.click(screen.getByRole("tab", { name: "翻译服务" }));
+    fireEvent.change(screen.getByLabelText("选择服务"), {
+      target: { value: "chatgpt" },
+    });
+    await waitFor(() =>
+      expect(
+        document.querySelector('option[value="cached-model"]'),
+      ).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "刷新模型列表" }));
+    await waitFor(() =>
+      expect(
+        document.querySelector('option[value="gpt-6.1-sol"]'),
+      ).toBeTruthy(),
+    );
+    expect(document.querySelector('option[value="cached-model"]')).toBeNull();
+    expect(stored.services.chatgpt?.model).toBe("my-current-model");
+    browserMock.runtime.sendMessage.mockRejectedValueOnce(
+      new Error("Catalog unavailable"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "刷新模型列表" }));
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "Catalog unavailable",
+    );
+    expect(document.querySelector('option[value="gpt-6.1-sol"]')).toBeTruthy();
+  });
   it("renders tabs and persists general and service settings", async () => {
     render(<Options />);
 
