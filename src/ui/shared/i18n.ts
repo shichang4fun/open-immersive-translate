@@ -56,9 +56,10 @@ const zhCN = {
   "basic.theme": "译文主题",
   "basic.themePreview": "这是译文样式预览",
   "basic.font": "译文字体",
-  "basic.fontSize": "译文字号",
-  "basic.followSourceSize": "跟随原文",
-  "basic.fontSizeHint": "只调整网页译文，原文保持不变；修改后自动保存。",
+  "basic.fontSize": "译文字号缩放",
+  "basic.followSourceSize": "100%（与原文相同）",
+  "basic.fontSizeHint":
+    "按各段原文字号缩放：小于 100% 缩小，大于 100% 放大。原文保持不变。",
   "services.refreshModels": "刷新模型列表",
   "services.refreshingModels": "正在刷新模型…",
   "services.modelsUnavailable": "无法刷新模型，请检查 ChatGPT 登录状态后重试。",
@@ -323,10 +324,10 @@ const en: Record<I18nKey, string> = {
   "basic.theme": "Translation theme",
   "basic.themePreview": "Translation style preview",
   "basic.font": "Translation font",
-  "basic.fontSize": "Translation font size",
-  "basic.followSourceSize": "Match source text",
+  "basic.fontSize": "Translation font scale",
+  "basic.followSourceSize": "100% (match source text)",
   "basic.fontSizeHint":
-    "Only changes webpage translations. Source text is unchanged. Changes save automatically.",
+    "Scale relative to each source paragraph: below 100% is smaller; above 100% is larger. Source text is unchanged.",
   "services.refreshModels": "Refresh model list",
   "services.refreshingModels": "Refreshing models…",
   "services.modelsUnavailable":
@@ -590,9 +591,10 @@ const zhTW: Partial<Record<I18nKey, string>> = {
   "basic.theme": "譯文主題",
   "basic.themePreview": "這是譯文樣式預覽",
   "basic.font": "譯文字型",
-  "basic.fontSize": "譯文字號",
-  "basic.followSourceSize": "跟隨原文",
-  "basic.fontSizeHint": "只調整網頁譯文，原文保持不變；修改後自動儲存。",
+  "basic.fontSize": "譯文字號縮放",
+  "basic.followSourceSize": "100%（與原文相同）",
+  "basic.fontSizeHint":
+    "按各段原文字號縮放：小於 100% 縮小，大於 100% 放大。原文保持不變。",
   "services.refreshModels": "重新整理模型列表",
   "services.refreshingModels": "正在重新整理模型…",
   "services.modelsUnavailable":
@@ -837,10 +839,10 @@ const ja: Partial<Record<I18nKey, string>> = {
   "basic.theme": "翻訳テーマ",
   "basic.themePreview": "翻訳スタイルのプレビュー",
   "basic.font": "翻訳フォント",
-  "basic.fontSize": "訳文の文字サイズ",
-  "basic.followSourceSize": "原文に合わせる",
+  "basic.fontSize": "訳文の文字倍率",
+  "basic.followSourceSize": "100%（原文と同じ）",
   "basic.fontSizeHint":
-    "ウェブページの訳文だけに適用します。変更は自動保存されます。",
+    "各段落の原文を基準に、100% 未満で縮小、100% 超で拡大します。原文は変更しません。",
   "services.refreshModels": "モデル一覧を更新",
   "services.refreshingModels": "モデルを更新中…",
   "services.modelsUnavailable":

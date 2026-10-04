@@ -70,12 +70,13 @@ describe("Options", () => {
   it("persists translation font size, previews it and restores inheritance", async () => {
     stored.translationFontSize = "120%";
     render(<Options />);
-    const size = await screen.findByLabelText("译文字号");
+    const size = await screen.findByLabelText("译文字号缩放");
     expect((size as HTMLSelectElement).value).toBe("120%");
-    fireEvent.change(size, { target: { value: "22px" } });
-    await waitFor(() => expect(stored.translationFontSize).toBe("22px"));
-    expect(screen.getByText("这是译文样式预览").style.fontSize).toBe("22px");
-    fireEvent.change(size, { target: { value: "" } });
+    expect(within(size).queryByRole("option", { name: /px/ })).toBeNull();
+    fireEvent.change(size, { target: { value: "150%" } });
+    await waitFor(() => expect(stored.translationFontSize).toBe("150%"));
+    expect(screen.getByText("这是译文样式预览").style.fontSize).toBe("150%");
+    fireEvent.change(size, { target: { value: "100%" } });
     await waitFor(() => expect(stored.translationFontSize).toBeUndefined());
   });
 

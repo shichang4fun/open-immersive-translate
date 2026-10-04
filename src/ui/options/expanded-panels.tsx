@@ -458,16 +458,6 @@ export function ExpandedFeatureCards({
             onChange={(contextWordLimit) => void onPatch({ contextWordLimit })}
           />
           <TextField
-            id="translation-font-size"
-            label="自定义译文字号（例如 18px、120%）"
-            value={String(config.translationFontSize ?? "")}
-            onChange={(translationFontSize) =>
-              void onPatch({
-                translationFontSize: translationFontSize || undefined,
-              })
-            }
-          />
-          <TextField
             id="translation-color"
             label="译文颜色"
             value={config.translationColor ?? ""}

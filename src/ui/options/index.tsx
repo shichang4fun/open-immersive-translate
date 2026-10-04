@@ -166,17 +166,18 @@ interface PanelProps {
 }
 
 function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
-  const fontSize = translationFontSize(config.translationFontSize) ?? "";
+  const fontSize = translationFontSize(config.translationFontSize) ?? "100%";
   const fontSizes = [
-    "12px",
-    "14px",
-    "16px",
-    "18px",
-    "20px",
-    "22px",
-    "24px",
-    "28px",
-    "32px",
+    "50%",
+    "75%",
+    "90%",
+    "100%",
+    "110%",
+    "120%",
+    "125%",
+    "150%",
+    "175%",
+    "200%",
   ];
   if (fontSize && !fontSizes.includes(fontSize)) fontSizes.push(fontSize);
   const languageOptions = LANGUAGE_CODES.map((code) => ({
@@ -304,12 +305,14 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
           <Select
             id="translation-font-size-preset"
             value={fontSize}
-            options={[
-              { value: "", label: t("basic.followSourceSize") },
-              ...fontSizes.map((value) => ({ value, label: value })),
-            ]}
+            options={fontSizes.map((value) => ({
+              value,
+              label: value === "100%" ? t("basic.followSourceSize") : value,
+            }))}
             onChange={(value) =>
-              save(onPatch, { translationFontSize: value || undefined })
+              save(onPatch, {
+                translationFontSize: value === "100%" ? undefined : value,
+              })
             }
           />
         </Field>

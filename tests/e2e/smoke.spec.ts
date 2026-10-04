@@ -352,6 +352,13 @@ test("updates translation font size from settings without changing the source", 
     const sourceSize = await article
       .locator("#first")
       .evaluate((el) => getComputedStyle(el).fontSize);
+    await article.evaluate(() => {
+      const heading = document.createElement("h1");
+      heading.id = "scaling-title";
+      heading.textContent = "A larger heading for translation scaling";
+      heading.style.fontSize = "32px";
+      document.querySelector("article")!.prepend(heading);
+    });
     await expect
       .poll(() => contentState(worker))
       .toMatchObject({ ready: true });
@@ -360,16 +367,28 @@ test("updates translation font size from settings without changing the source", 
     await expect(target).toContainText("[zh]");
     const settings = await context.newPage();
     await settings.goto(`chrome-extension://${extensionId}/options.html`);
-    const size = settings.getByLabel("译文字号", { exact: true });
-    await size.selectOption("24px");
-    await expect(target).toHaveCSS("font-size", "24px");
-    await expect(article.locator("#first")).toHaveCSS("font-size", sourceSize);
-    await expect(settings.getByText("这是译文样式预览")).toHaveCSS(
+    const size = settings.getByLabel("译文字号缩放", { exact: true });
+    const headingTarget = article.locator(
+      "#scaling-title font[data-imt='target']",
+    );
+    await expect(size).toHaveValue("100%");
+    await size.selectOption("150%");
+    await expect(target).toHaveCSS(
       "font-size",
-      "24px",
+      `${parseFloat(sourceSize) * 1.5}px`,
+    );
+    await expect(headingTarget).toHaveCSS("font-size", "48px");
+    await expect(article.locator("#scaling-title")).toHaveCSS(
+      "font-size",
+      "32px",
+    );
+    await expect(article.locator("#first")).toHaveCSS("font-size", sourceSize);
+    await expect(settings.getByText("这是译文样式预览")).toHaveAttribute(
+      "style",
+      /font-size: 150%/,
     );
     await settings.reload();
-    await expect(size).toHaveValue("24px");
+    await expect(size).toHaveValue("150%");
     await settings.screenshot({
       path: testInfo.outputPath("translation-font-size.png"),
       fullPage: true,
@@ -378,8 +397,15 @@ test("updates translation font size from settings without changing the source", 
       path: testInfo.outputPath("translation-font-size-page.png"),
       fullPage: true,
     });
-    await size.selectOption("");
+    await size.selectOption("75%");
+    await expect(target).toHaveCSS(
+      "font-size",
+      `${parseFloat(sourceSize) * 0.75}px`,
+    );
+    await expect(headingTarget).toHaveCSS("font-size", "24px");
+    await size.selectOption("100%");
     await expect(target).toHaveCSS("font-size", sourceSize);
+    await expect(headingTarget).toHaveCSS("font-size", "32px");
     await expect(article.locator("#first")).toHaveCSS("font-size", sourceSize);
     await settings.getByRole("tab", { name: "翻译服务", exact: true }).click();
     await settings
