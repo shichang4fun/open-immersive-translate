@@ -5,8 +5,7 @@ const mocks = vi.hoisted(() => ({
   enabled: true,
   alarm: vi.fn(),
   clear: vi.fn(),
-  download: vi.fn(),
-  search: vi.fn(),
+  write: vi.fn(),
   onAlarm: vi.fn(),
   onStartup: vi.fn(),
   onInstalled: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock("webextension-polyfill", () => ({
       onStartup: { addListener: mocks.onStartup },
       onInstalled: { addListener: mocks.onInstalled },
     },
-    downloads: { download: mocks.download, search: mocks.search },
   },
 }));
 vi.mock("../../src/shared/config", () => ({
@@ -55,10 +53,18 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.stored = {};
   mocks.enabled = true;
-  mocks.download.mockResolvedValue(1);
-  mocks.search.mockResolvedValue([{ state: "complete" }]);
+  vi.stubEnv("VITE_LOCAL_ARCHIVE_TOKEN", "test-token-only-for-unit-tests-1234");
+  vi.stubGlobal("fetch", mocks.write);
+  mocks.write.mockResolvedValue({
+    ok: true,
+    json: async () => ({ folder: "/archive/test", count: 0 }),
+  });
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 describe("weekly translation backups", () => {
   it("uses Sunday 23:00 Shanghai with a strict next-week boundary", () => {
@@ -90,12 +96,10 @@ describe("weekly translation backups", () => {
     const first = runWeeklyExport();
     expect(runWeeklyExport()).toBe(first);
     const state = await first;
-    expect(mocks.download).toHaveBeenCalledTimes(3);
-    expect(
-      mocks.download.mock.calls.map((call) =>
-        call[0].filename.split("/").at(-1),
-      ),
-    ).toEqual(["translations.ndjson", "translations.csv", "manifest.json"]);
+    expect(mocks.write).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(mocks.write.mock.calls[0][1].body)).toEqual({
+      records: [],
+    });
     expect(state).toMatchObject({
       count: 0,
       lastCompletedAt: Date.now(),
@@ -107,18 +111,16 @@ describe("weekly translation backups", () => {
   it("preserves the overdue date on disk failure and retries at most hourly", async () => {
     const nextDue = Date.parse("2026-10-04T15:00:00Z");
     mocks.stored[WEEKLY_EXPORT_KEY] = { nextDue };
-    mocks.search.mockResolvedValueOnce([
-      { state: "interrupted", error: "FILE_ACCESS_DENIED" },
-    ]);
-    await expect(runWeeklyExport()).rejects.toThrow("FILE_ACCESS_DENIED");
+    mocks.write.mockResolvedValueOnce({ ok: false, status: 500 });
+    await expect(runWeeklyExport()).rejects.toThrow("HTTP 500");
     expect(mocks.stored[WEEKLY_EXPORT_KEY]).toMatchObject({
       nextDue,
-      lastError: "FILE_ACCESS_DENIED",
+      lastError: "Local archive writer returned HTTP 500.",
     });
     expect(mocks.stored[WEEKLY_EXPORT_KEY]).not.toHaveProperty(
       "lastCompletedAt",
     );
-    expect(mocks.download).toHaveBeenCalledTimes(1);
+    expect(mocks.write).toHaveBeenCalledTimes(1);
     expect(mocks.alarm).toHaveBeenLastCalledWith(WEEKLY_EXPORT_ALARM, {
       when: Date.now() + 60 * 60 * 1000,
     });
@@ -134,6 +136,6 @@ describe("weekly translation backups", () => {
     );
     mocks.onStartup.mock.calls[0][0]();
     await vi.waitFor(() => expect(mocks.alarm).toHaveBeenCalledTimes(3));
-    expect(mocks.download).toHaveBeenCalledTimes(3);
+    expect(mocks.write).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,10 +1,7 @@
 import browser from "webextension-polyfill";
 
 import { loadConfig, onConfigChange } from "../shared/config";
-import {
-  formatTranslationHistory,
-  type WeeklyExportState,
-} from "../shared/translation-history";
+import type { WeeklyExportState } from "../shared/translation-history";
 import { translationHistoryRecords } from "./translation-history";
 
 export const WEEKLY_EXPORT_ALARM = "imt:weekly-translation-export";
@@ -37,30 +34,6 @@ async function saveState(state: WeeklyExportState): Promise<void> {
   await browser.storage.local.set({ [WEEKLY_EXPORT_KEY]: state });
 }
 
-/** Wait for disk completion, not merely acceptance of the download request. */
-async function downloadFile(
-  folder: string,
-  name: string,
-  text: string,
-  mime: string,
-): Promise<void> {
-  const id = await browser.downloads.download({
-    url: `data:${mime};charset=utf-8,${encodeURIComponent(text)}`,
-    filename: `${folder}/${name}`,
-    saveAs: false,
-    conflictAction: "uniquify",
-  });
-  for (let attempt = 0; attempt < 120; attempt++) {
-    const [item] = await browser.downloads.search({ id });
-    if (item?.state === "complete") return;
-    if (!item || item.state === "interrupted") {
-      throw new Error(item?.error ?? "Download disappeared.");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Download did not complete within 30 seconds.");
-}
-
 let inFlight: Promise<WeeklyExportState> | undefined;
 
 /** Manual backups and alarms share one implementation and one snapshot. */
@@ -81,43 +54,31 @@ async function performExport(): Promise<WeeklyExportState> {
   await saveState(state);
   try {
     const records = await translationHistoryRecords();
-    const jsonl = formatTranslationHistory(records, "jsonl");
-    const csv = formatTranslationHistory(records, "csv");
-    const date = new Date(now + 8 * HOUR).toISOString().slice(0, 10);
-    const folder = `open-immersive-translate/weekly/${date}/${now}`;
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(jsonl.text),
-    );
-    const manifest = {
-      exported_at: new Date(now).toISOString(),
-      timezone: "Asia/Shanghai",
-      records: records.length,
-      paired_records: records.filter((record) => record.source_text !== null)
-        .length,
-      jsonl_sha256: Array.from(new Uint8Array(digest), (byte) =>
-        byte.toString(16).padStart(2, "0"),
-      ).join(""),
-    };
-    await downloadFile(
-      folder,
-      "translations.ndjson",
-      jsonl.text,
-      "application/x-ndjson",
-    );
-    await downloadFile(folder, "translations.csv", csv.text, "text/csv");
-    // Written last: a manifest indicates the paired files completed successfully.
-    await downloadFile(
-      folder,
-      "manifest.json",
-      JSON.stringify(manifest, null, 2) + "\n",
-      "application/json",
-    );
+    const token = import.meta.env.VITE_LOCAL_ARCHIVE_TOKEN as
+      string | undefined;
+    if (!token) throw new Error("Local archive writer is not configured.");
+    const response = await fetch("http://127.0.0.1:24198/archive", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ records }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok)
+      throw new Error(`Local archive writer returned HTTP ${response.status}.`);
+    const result = (await response.json()) as { folder: string; count: number };
+    if (typeof result.folder !== "string" || result.count !== records.length) {
+      throw new Error(
+        "Local archive writer did not confirm the complete snapshot.",
+      );
+    }
     const completed: WeeklyExportState = {
       nextDue: nextWeeklyExport(Date.now()),
       lastAttemptAt: now,
       lastCompletedAt: Date.now(),
-      folder,
+      folder: result.folder,
       count: records.length,
     };
     await saveState(completed);

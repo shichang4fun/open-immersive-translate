@@ -232,7 +232,7 @@ export function init(ctx: FeatureContext): () => void {
             ? `\n下次自动备份：${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "short" }).format(result.nextDue)}（北京时间）`
             : "\n每周自动备份已关闭。";
           window.alert(
-            `已保存 ${result.count} 条记录到 Chrome 下载目录：\n${result.folder}${next}`,
+            `已保存 ${result.count} 条记录到本机存档目录：\n${result.folder}${next}`,
           );
         })
         .catch(() => {

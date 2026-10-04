@@ -1405,9 +1405,9 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
           }
         />
         <p class="ui-status">
-          每周日北京时间 23:00 由插件后台导出 JSONL、CSV 和校验文件，到 Chrome
-          下载目录的 open-immersive-translate/weekly 文件夹。关闭 Chrome
-          错过后，下次启动补一次。无需 Codex 或模型调用，不会发起新翻译。
+          每周日北京时间 23:00，由插件后台和本机存档程序直接保存 JSONL、CSV
+          和校验文件。 关闭 Chrome 错过后，下次启动补一次。无需 Codex
+          或模型调用，不会发起新翻译。
         </p>
         {weeklyStatus && (
           <p class="ui-status" role="status">

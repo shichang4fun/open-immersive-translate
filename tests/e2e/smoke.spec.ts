@@ -6,7 +6,8 @@ import {
   type Worker,
 } from "@playwright/test";
 import { createServer, type Server } from "node:http";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -15,11 +16,6 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 interface ExtensionApi {
   alarms: {
     create(name: string, info: { when: number }): Promise<void>;
-  };
-  downloads: {
-    search(
-      query: Record<string, unknown>,
-    ): Promise<Array<{ filename: string; state: string }>>;
   };
   runtime: {
     sendMessage(message: unknown): Promise<unknown>;
@@ -118,25 +114,11 @@ async function launchExtension(
       tmpdir(),
       `bilingual-translator-e2e-${process.pid}-${++profileSequence}`,
     );
-  // Programmatic downloads use a profile-local directory in isolated tests.
-  if (!profileDirectory) {
-    await mkdir(path.join(userDataDir, "Default"), { recursive: true });
-    await writeFile(
-      path.join(userDataDir, "Default", "Preferences"),
-      JSON.stringify({
-        download: {
-          default_directory: path.join(userDataDir, "exports"),
-          prompt_for_download: false,
-        },
-      }),
-    );
-  }
   const context = await playwright.chromium.launchPersistentContext(
     userDataDir,
     {
       channel: "chromium",
       headless: true,
-      downloadsPath: path.join(userDataDir, "exports"),
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
@@ -314,6 +296,17 @@ test("exports a weekly archive from a background alarm without a webpage", async
 }) => {
   const { context, worker, extensionId, userDataDir } =
     await launchExtension(playwright);
+  const { startArchiveServer } = (await import(
+    pathToFileURL(path.resolve("scripts/local-archive-server.mjs")).href
+  )) as {
+    startArchiveServer(options: { token: string; directory: string }): Server;
+  };
+  const companion = startArchiveServer({
+    token: process.env.IMT_ARCHIVE_TOKEN!,
+    directory: path.join(userDataDir, "exports"),
+  });
+  if (!companion.listening)
+    await new Promise<void>((resolve) => companion.once("listening", resolve));
   try {
     const setup = await context.newPage();
     await setup.goto(`chrome-extension://${extensionId}/options.html#data`);
@@ -366,17 +359,17 @@ test("exports a weekly archive from a background alarm without a webpage", async
       .toBeGreaterThan(0);
     const completed = await state();
     expect(completed.count).toBe(1);
-    // Playwright stores accepted downloads under generated names in downloadsPath.
-    const directory = path.join(userDataDir, "exports");
-    const files = await Promise.all(
-      (await readdir(directory)).map((name) =>
-        readFile(path.join(directory, name), "utf8"),
-      ),
+    const jsonl = await readFile(
+      path.join(completed.folder!, "translations.jsonl"),
+      "utf8",
     );
-    expect(files).toHaveLength(3);
-    const jsonl = files.find((text) => text.startsWith('{"'))!;
-    const csv = files.find((text) => text.startsWith("\uFEFFschema_version"))!;
-    const manifest = JSON.parse(files.find((text) => text.startsWith("{\n"))!);
+    const csv = await readFile(
+      path.join(completed.folder!, "translations.csv"),
+      "utf8",
+    );
+    const manifest = JSON.parse(
+      await readFile(path.join(completed.folder!, "manifest.json"), "utf8"),
+    );
     expect(JSON.parse(jsonl.trim())).toMatchObject({
       source_text: 'Original, quoted "text"',
       translated_text: "中文译文",
@@ -390,6 +383,7 @@ test("exports a weekly archive from a background alarm without a webpage", async
     expect((await state()).folder).toBe(completed.folder);
   } finally {
     await context.close();
+    await new Promise<void>((resolve) => companion.close(() => resolve()));
   }
 });
 

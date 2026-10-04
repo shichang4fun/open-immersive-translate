@@ -402,7 +402,9 @@ export const configSchema: z.ZodType<Config> = z.object({
     })
     .default({ enabled: true, maxAgeDays: 30 }),
   saveTranslationHistory: z.boolean().default(true),
-  weeklyTranslationExport: z.boolean().default(true),
+  weeklyTranslationExport: z
+    .boolean()
+    .default(Boolean(import.meta.env.VITE_LOCAL_ARCHIVE_TOKEN)),
 });
 
 /** Defaults used when no configuration has been stored. */
