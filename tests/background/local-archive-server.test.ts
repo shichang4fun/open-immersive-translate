@@ -105,4 +105,20 @@ describe("local archive writer", () => {
       await readFile(path.join(result.folder, "translations.jsonl"), "utf8"),
     ).toBe(jsonl);
   });
+  it("exports new timestamps and accepts legacy records without those fields", async () => {
+    const current = {
+      ...record,
+      first_saved_at: "2025-01-01T00:00:00Z",
+      last_seen_at: record.saved_at,
+    };
+    const response = await post([current, record]);
+    expect(response.status).toBe(201);
+    const { folder } = (await response.json()) as { folder: string };
+    const csv = await readFile(path.join(folder, "translations.csv"), "utf8");
+    expect(csv).toContain("saved_at,first_saved_at,last_seen_at,");
+    expect(csv).toContain('"2025-01-01T00:00:00Z"');
+    expect((await post([{ ...current, last_seen_at: "invalid" }])).status).toBe(
+      400,
+    );
+  });
 });

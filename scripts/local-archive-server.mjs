@@ -20,6 +20,8 @@ const columns = [
   "target_language",
   "requested_service",
   "saved_at",
+  "first_saved_at",
+  "last_seen_at",
   "provenance",
   "translated_text_format",
 ];
@@ -85,7 +87,13 @@ export function startArchiveServer({ token, directory, port = 24198 }) {
             (record.source_text !== null &&
               typeof record.source_text !== "string") ||
             !Number.isFinite(Date.parse(record.saved_at)) ||
-            columns.some((column) => !Object.hasOwn(record, column)),
+            columns.some((column) =>
+              column === "first_saved_at" || column === "last_seen_at"
+                ? record[column] != null &&
+                  (typeof record[column] !== "string" ||
+                    !Number.isFinite(Date.parse(record[column])))
+                : !Object.hasOwn(record, column),
+            ),
         )
       )
         return reply(400, { error: "Invalid records" });

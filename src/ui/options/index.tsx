@@ -1395,7 +1395,7 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
           }
         />
         <p class="ui-status">
-          保存原文、译文、来源网址、标题、语言、请求的翻译服务及保存时间。记录保存在本机，清空缓存不会删除这些记录。
+          保存原文、译文、来源网址、标题、语言、请求的翻译服务、首次保存和最近出现时间。旧记录无法恢复的首次时间留空。记录保存在本机，清空缓存不会删除这些记录。
         </p>
         <Toggle
           checked={config.weeklyTranslationExport}

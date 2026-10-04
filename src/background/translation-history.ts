@@ -60,19 +60,29 @@ export class TranslationHistory {
     const id = Array.from(new Uint8Array(digest), (byte) =>
       byte.toString(16).padStart(2, "0"),
     ).join("");
-    const record: TranslationHistoryRecord = {
-      ...input,
-      schema_version: 1,
-      id,
-      saved_at: new Date().toISOString(),
-      provenance: "page_translation",
-      translated_text_format: "plain",
-    };
     const database = await this.open();
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction("records", "readwrite");
-      // Stable ids prevent refreshes and cache hits from duplicating the same pair.
-      transaction.objectStore("records").put(record);
+      const store = transaction.objectStore("records");
+      // Read and update in one transaction so concurrent saves preserve the first time.
+      const request = store.get(id) as IDBRequest<
+        TranslationHistoryRecord | undefined
+      >;
+      request.onsuccess = () => {
+        const previous = request.result;
+        const now = new Date().toISOString();
+        const record: TranslationHistoryRecord = {
+          ...input,
+          schema_version: 1,
+          id,
+          saved_at: now, // Keep the legacy field's latest-save meaning.
+          first_saved_at: previous ? (previous.first_saved_at ?? null) : now,
+          last_seen_at: now,
+          provenance: "page_translation",
+          translated_text_format: "plain",
+        };
+        store.put(record);
+      };
       transaction.oncomplete = () => resolve();
       transaction.onabort = transaction.onerror = () =>
         reject(
@@ -99,10 +109,16 @@ export class TranslationHistory {
         .objectStore("records")
         .getAll(),
     )) as TranslationHistoryRecord[];
-    return records.sort(
-      (a, b) =>
-        a.saved_at.localeCompare(b.saved_at) || a.id.localeCompare(b.id),
-    );
+    return records
+      .map((record) => ({
+        ...record,
+        first_saved_at: record.first_saved_at ?? null,
+        last_seen_at: record.last_seen_at ?? record.saved_at,
+      }))
+      .sort(
+        (a, b) =>
+          a.saved_at.localeCompare(b.saved_at) || a.id.localeCompare(b.id),
+      );
   }
 }
 
@@ -136,6 +152,8 @@ export async function translationHistoryRecords(): Promise<
       target_language: null,
       requested_service: null,
       saved_at: new Date(entry.ts).toISOString(),
+      first_saved_at: null,
+      last_seen_at: null,
       provenance: "recovered_cache",
       translated_text_format: "placeholders",
     });

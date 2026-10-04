@@ -24,6 +24,8 @@ const record: TranslationHistoryRecord = {
   target_language: "zh-CN",
   requested_service: "chatgpt",
   saved_at: "2026-10-05T00:00:00.000Z",
+  first_saved_at: "2026-10-05T00:00:00.000Z",
+  last_seen_at: "2026-10-05T00:00:00.000Z",
   provenance: "page_translation",
   translated_text_format: "plain",
 };

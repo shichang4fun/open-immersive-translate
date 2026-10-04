@@ -57,7 +57,10 @@ async function performExport(): Promise<WeeklyExportState> {
     const token = import.meta.env.VITE_LOCAL_ARCHIVE_TOKEN as
       string | undefined;
     if (!token) throw new Error("Local archive writer is not configured.");
-    const response = await fetch("http://127.0.0.1:24198/archive", {
+    const port = Number(import.meta.env.VITE_LOCAL_ARCHIVE_PORT || 24198);
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      throw new Error("Invalid local archive port.");
+    const response = await fetch(`http://127.0.0.1:${port}/archive`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

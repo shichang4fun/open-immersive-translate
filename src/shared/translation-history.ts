@@ -31,6 +31,9 @@ export interface TranslationHistoryRecord {
   target_language: string | null;
   requested_service: string | null;
   saved_at: string;
+  /** Unknown for legacy records whose first save was overwritten. */
+  first_saved_at: string | null;
+  last_seen_at: string | null;
   provenance: "page_translation" | "recovered_cache" | "recovered_page";
   translated_text_format: "plain" | "placeholders";
 }
@@ -66,6 +69,8 @@ const columns: readonly (keyof TranslationHistoryRecord)[] = [
   "target_language",
   "requested_service",
   "saved_at",
+  "first_saved_at",
+  "last_seen_at",
   "provenance",
   "translated_text_format",
 ];

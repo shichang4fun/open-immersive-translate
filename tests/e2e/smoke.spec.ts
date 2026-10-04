@@ -7,9 +7,7 @@ import {
 } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
-import { pathToFileURL } from "node:url";
 import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
@@ -107,11 +105,16 @@ async function launchExtension(
   extensionId: string;
   userDataDir: string;
 }> {
-  const extensionPath = path.resolve("dist");
+  const extensionPath = process.env.IMT_E2E_EXTENSION_PATH;
+  const testRoot = process.env.IMT_E2E_ROOT;
+  if (!extensionPath || !testRoot)
+    throw new Error(
+      "Run browser tests with pnpm e2e to create an isolated build.",
+    );
   const userDataDir =
     profileDirectory ??
     path.join(
-      tmpdir(),
+      testRoot,
       `bilingual-translator-e2e-${process.pid}-${++profileSequence}`,
     );
   const context = await playwright.chromium.launchPersistentContext(
@@ -294,19 +297,7 @@ test("translates article paragraphs once and restores the DOM", async ({
 test("exports a weekly archive from a background alarm without a webpage", async ({
   playwright,
 }) => {
-  const { context, worker, extensionId, userDataDir } =
-    await launchExtension(playwright);
-  const { startArchiveServer } = (await import(
-    pathToFileURL(path.resolve("scripts/local-archive-server.mjs")).href
-  )) as {
-    startArchiveServer(options: { token: string; directory: string }): Server;
-  };
-  const companion = startArchiveServer({
-    token: process.env.IMT_ARCHIVE_TOKEN!,
-    directory: path.join(userDataDir, "exports"),
-  });
-  if (!companion.listening)
-    await new Promise<void>((resolve) => companion.once("listening", resolve));
+  const { context, worker, extensionId } = await launchExtension(playwright);
   try {
     const setup = await context.newPage();
     await setup.goto(`chrome-extension://${extensionId}/options.html#data`);
@@ -359,6 +350,9 @@ test("exports a weekly archive from a background alarm without a webpage", async
       .toBeGreaterThan(0);
     const completed = await state();
     expect(completed.count).toBe(1);
+    expect(
+      completed.folder!.startsWith(process.env.IMT_E2E_ARCHIVE_DIR + path.sep),
+    ).toBe(true);
     const jsonl = await readFile(
       path.join(completed.folder!, "translations.jsonl"),
       "utf8",
@@ -383,7 +377,83 @@ test("exports a weekly archive from a background alarm without a webpage", async
     expect((await state()).folder).toBe(completed.folder);
   } finally {
     await context.close();
-    await new Promise<void>((resolve) => companion.close(() => resolve()));
+  }
+});
+
+test("preserves first save timestamps under concurrent saves and handles legacy records", async ({
+  playwright,
+}) => {
+  const { context, extensionId } = await launchExtension(playwright);
+  try {
+    const page = await context.newPage();
+    await page.goto(`chrome-extension://${extensionId}/options.html#data`);
+    const result = await page.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      const record = {
+        url: "https://example.com/timestamps",
+        title: "Timestamps",
+        paragraph_id: "p-1",
+        paragraph_index: 0,
+        source_text: "Original",
+        translated_text: "译文",
+        source_language: "en",
+        target_language: "zh-CN",
+        requested_service: "mock",
+      };
+      const save = () =>
+        api.runtime.sendMessage({ type: "saveTranslationHistory", record });
+      const exported = async () => {
+        const file = (await api.runtime.sendMessage({
+          type: "exportTranslationHistory",
+          format: "jsonl",
+        })) as { text: string };
+        return JSON.parse(file.text.trim()) as Record<string, unknown>;
+      };
+      await save();
+      const first = await exported();
+      const database = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open("bilingual-translator-history", 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const put = (value: Record<string, unknown>) =>
+        new Promise<void>((resolve, reject) => {
+          const transaction = database.transaction("records", "readwrite");
+          transaction.objectStore("records").put(value);
+          transaction.oncomplete = () => resolve();
+          transaction.onabort = () => reject(transaction.error);
+        });
+      try {
+        await put({ ...first, first_saved_at: "2025-01-01T00:00:00.000Z" });
+        await Promise.all(Array.from({ length: 8 }, save));
+        const repeated = await exported();
+        const legacy: Record<string, unknown> = {
+          ...repeated,
+          saved_at: "2025-02-01T00:00:00.000Z",
+        };
+        delete legacy.first_saved_at;
+        delete legacy.last_seen_at;
+        await put(legacy);
+        const legacyExport = await exported();
+        await save();
+        return { first, repeated, legacyExport, updated: await exported() };
+      } finally {
+        database.close();
+      }
+    });
+    expect(result.first.first_saved_at).toBe(result.first.saved_at);
+    expect(result.first.last_seen_at).toBe(result.first.saved_at);
+    expect(result.repeated.first_saved_at).toBe("2025-01-01T00:00:00.000Z");
+    expect(result.repeated.last_seen_at).toBe(result.repeated.saved_at);
+    expect(result.legacyExport.first_saved_at).toBeNull();
+    expect(result.legacyExport.last_seen_at).toBe("2025-02-01T00:00:00.000Z");
+    expect(result.updated.first_saved_at).toBeNull();
+    expect(result.updated.last_seen_at).not.toBe(
+      result.legacyExport.last_seen_at,
+    );
+    expect(result.updated.id).toBe(result.first.id);
+  } finally {
+    await context.close();
   }
 });
 

@@ -54,6 +54,7 @@ beforeEach(() => {
   mocks.stored = {};
   mocks.enabled = true;
   vi.stubEnv("VITE_LOCAL_ARCHIVE_TOKEN", "test-token-only-for-unit-tests-1234");
+  vi.stubEnv("VITE_LOCAL_ARCHIVE_PORT", "");
   vi.stubGlobal("fetch", mocks.write);
   mocks.write.mockResolvedValue({
     ok: true,
@@ -67,6 +68,18 @@ afterEach(() => {
 });
 
 describe("weekly translation backups", () => {
+  it("uses the isolated port while keeping the destination on loopback", async () => {
+    vi.stubEnv("VITE_LOCAL_ARCHIVE_PORT", "54321");
+    await runWeeklyExport();
+    expect(mocks.write.mock.calls[0][0]).toBe("http://127.0.0.1:54321/archive");
+  });
+  it("rejects invalid ports before sending any records", async () => {
+    vi.stubEnv("VITE_LOCAL_ARCHIVE_PORT", "70000");
+    await expect(runWeeklyExport()).rejects.toThrow(
+      "Invalid local archive port",
+    );
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
   it("uses Sunday 23:00 Shanghai with a strict next-week boundary", () => {
     expect(nextWeeklyExport(Date.parse("2026-10-04T14:59:59Z"))).toBe(
       Date.parse("2026-10-04T15:00:00Z"),

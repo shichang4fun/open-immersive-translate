@@ -33,7 +33,7 @@ pnpm build
 
 普通构建不包含本机配对令牌，每周自动备份默认关闭。启用备份时，构建扩展的 `VITE_LOCAL_ARCHIVE_TOKEN` 与存档程序的 `IMT_ARCHIVE_TOKEN` 必须相同；程序还需设置 `IMT_ARCHIVE_DIR`。具体运行方法见 README 的翻译记录存档说明。
 
-端到端测试中的每周备份场景会启动监听 `127.0.0.1:24198` 的测试程序；不要与已运行的个人存档程序同时执行这个场景，测试应使用临时存档目录。单元测试无需停止个人存档程序。
+执行 `pnpm e2e` 会自动生成测试令牌，启动随机本机端口的测试存档程序，并在临时目录构建扩展、创建浏览器资料和存档。正常完成或测试失败后会清理临时目录；可与个人存档程序同时运行，不覆盖 `dist/`，也不需要个人凭据。可用 `pnpm e2e --grep "weekly archive"` 运行指定场景。首次运行前需安装 Playwright Chromium：`pnpm exec playwright install chromium`。
 
 ## 同步上游
 
