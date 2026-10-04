@@ -3,6 +3,7 @@ import type {
   TranslationHistoryInput,
   TranslationHistoryFormat,
   TranslationHistoryExport,
+  WeeklyExportState,
 } from "./translation-history";
 
 import type { PageCommandId } from "./j-types";
@@ -185,6 +186,14 @@ export interface ExportTranslationHistoryMessage {
   format: TranslationHistoryFormat;
 }
 
+export interface RunWeeklyTranslationExportMessage {
+  type: "runWeeklyTranslationExport";
+}
+
+export interface GetWeeklyTranslationExportStateMessage {
+  type: "getWeeklyTranslationExportState";
+}
+
 export interface ClearCacheMessage {
   type: "clearCache";
 }
@@ -298,6 +307,8 @@ export type CancelPortMessage = Omit<CancelMessage, "tabId">;
 
 /** Every runtime and port message in the extension protocol. */
 export type Msg =
+  | RunWeeklyTranslationExportMessage
+  | GetWeeklyTranslationExportStateMessage
   | GetRuleMessage
   | TranslateMessage
   | TranslateResultMessage
@@ -334,6 +345,8 @@ export type Msg =
 
 /** Messages accepted through runtime.sendMessage by the background worker. */
 export type BackgroundRequest =
+  | RunWeeklyTranslationExportMessage
+  | GetWeeklyTranslationExportStateMessage
   | SaveTranslationHistoryMessage
   | GetTranslationHistoryStatsMessage
   | ExportTranslationHistoryMessage
@@ -371,50 +384,54 @@ export interface CancelAcknowledgement {
 
 /** Response type selected from a concrete background request. */
 export type BackgroundResponse<T extends BackgroundRequest> =
-  T extends GetRuleMessage
-    ? Rule
-    : T extends TranslateMessage
-      ? TranslateAcknowledgement
-      : T extends CancelMessage
-        ? CancelAcknowledgement
-        : T extends GetConfigMessage
-          ? Config
-          : T extends SetConfigMessage
-            ? Config
-            : T extends GetServicesMessage
-              ? ServiceInfo[]
-              : T extends TestServiceMessage
-                ? ServiceTestResult
-                : T extends
-                      | ChatgptOauthStartMessage
-                      | ChatgptOauthStatusMessage
-                      | ChatgptOauthCancelMessage
-                      | ChatgptOauthLogoutMessage
-                      | ChatgptOauthImportCliMessage
-                  ? ChatgptOauthStatus
-                  : T extends GetCacheStatsMessage
-                    ? CacheStatsResult
-                    : T extends ClearCacheMessage
-                      ? ClearCacheResult
-                      : T extends ValidateRuleMessage
-                        ? RuleValidationResult
-                        : T extends OpenOptionsMessage
-                          ? OpenOptionsResult
-                          : T extends AssistantRequestMessage
-                            ? AssistantResponse
-                            : T extends GetAssistantCapabilitiesMessage
-                              ? AssistantCapabilities
-                              : T extends OpenSidePanelMessage
-                                ? OpenSidePanelResult
-                                : T extends PageTranslationStateMessage
-                                  ? PageTranslationStateAcknowledgement
-                                  : T extends SaveTranslationHistoryMessage
-                                    ? { saved: boolean }
-                                    : T extends GetTranslationHistoryStatsMessage
-                                      ? { count: number }
-                                      : T extends ExportTranslationHistoryMessage
-                                        ? TranslationHistoryExport
-                                        : never;
+  T extends RunWeeklyTranslationExportMessage
+    ? WeeklyExportState
+    : T extends GetWeeklyTranslationExportStateMessage
+      ? WeeklyExportState | undefined
+      : T extends GetRuleMessage
+        ? Rule
+        : T extends TranslateMessage
+          ? TranslateAcknowledgement
+          : T extends CancelMessage
+            ? CancelAcknowledgement
+            : T extends GetConfigMessage
+              ? Config
+              : T extends SetConfigMessage
+                ? Config
+                : T extends GetServicesMessage
+                  ? ServiceInfo[]
+                  : T extends TestServiceMessage
+                    ? ServiceTestResult
+                    : T extends
+                          | ChatgptOauthStartMessage
+                          | ChatgptOauthStatusMessage
+                          | ChatgptOauthCancelMessage
+                          | ChatgptOauthLogoutMessage
+                          | ChatgptOauthImportCliMessage
+                      ? ChatgptOauthStatus
+                      : T extends GetCacheStatsMessage
+                        ? CacheStatsResult
+                        : T extends ClearCacheMessage
+                          ? ClearCacheResult
+                          : T extends ValidateRuleMessage
+                            ? RuleValidationResult
+                            : T extends OpenOptionsMessage
+                              ? OpenOptionsResult
+                              : T extends AssistantRequestMessage
+                                ? AssistantResponse
+                                : T extends GetAssistantCapabilitiesMessage
+                                  ? AssistantCapabilities
+                                  : T extends OpenSidePanelMessage
+                                    ? OpenSidePanelResult
+                                    : T extends PageTranslationStateMessage
+                                      ? PageTranslationStateAcknowledgement
+                                      : T extends SaveTranslationHistoryMessage
+                                        ? { saved: boolean }
+                                        : T extends GetTranslationHistoryStatsMessage
+                                          ? { count: number }
+                                          : T extends ExportTranslationHistoryMessage
+                                            ? TranslationHistoryExport
+                                            : never;
 
 /** Messages sent directly to a tab's content script. */
 export type TabMessage =

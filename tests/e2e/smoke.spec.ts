@@ -6,12 +6,21 @@ import {
   type Worker,
 } from "@playwright/test";
 import { createServer, type Server } from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
 interface ExtensionApi {
+  alarms: {
+    create(name: string, info: { when: number }): Promise<void>;
+  };
+  downloads: {
+    search(
+      query: Record<string, unknown>,
+    ): Promise<Array<{ filename: string; state: string }>>;
+  };
   runtime: {
     sendMessage(message: unknown): Promise<unknown>;
   };
@@ -109,11 +118,25 @@ async function launchExtension(
       tmpdir(),
       `bilingual-translator-e2e-${process.pid}-${++profileSequence}`,
     );
+  // Programmatic downloads use a profile-local directory in isolated tests.
+  if (!profileDirectory) {
+    await mkdir(path.join(userDataDir, "Default"), { recursive: true });
+    await writeFile(
+      path.join(userDataDir, "Default", "Preferences"),
+      JSON.stringify({
+        download: {
+          default_directory: path.join(userDataDir, "exports"),
+          prompt_for_download: false,
+        },
+      }),
+    );
+  }
   const context = await playwright.chromium.launchPersistentContext(
     userDataDir,
     {
       channel: "chromium",
       headless: true,
+      downloadsPath: path.join(userDataDir, "exports"),
       args: [
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
@@ -281,6 +304,90 @@ test("translates article paragraphs once and restores the DOM", async ({
     await expect
       .poll(() => page.locator("body").innerHTML())
       .toBe(originalBody);
+  } finally {
+    await context.close();
+  }
+});
+
+test("exports a weekly archive from a background alarm without a webpage", async ({
+  playwright,
+}) => {
+  const { context, worker, extensionId, userDataDir } =
+    await launchExtension(playwright);
+  try {
+    const setup = await context.newPage();
+    await setup.goto(`chrome-extension://${extensionId}/options.html#data`);
+    await setup.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      await api.runtime.sendMessage({
+        type: "saveTranslationHistory",
+        record: {
+          url: "https://example.com/article",
+          title: "Weekly archive",
+          paragraph_id: "p-1",
+          paragraph_index: 0,
+          source_text: 'Original, quoted "text"',
+          translated_text: "中文译文",
+          source_language: "en",
+          target_language: "zh-CN",
+          requested_service: "mock",
+        },
+      });
+    });
+    await setup.close();
+    await worker.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      await api.storage.local.set({
+        weeklyTranslationExportState: { nextDue: Date.now() - 1000 },
+      });
+      await api.alarms.create("imt:weekly-translation-export", {
+        when: Date.now() + 500,
+      });
+    });
+    const state = () =>
+      worker.evaluate(async () => {
+        const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+        return (await api.storage.local.get("weeklyTranslationExportState"))
+          .weeklyTranslationExportState as {
+          folder?: string;
+          count?: number;
+          lastCompletedAt?: number;
+        };
+      });
+    await expect
+      .poll(
+        async () => {
+          const current = await state();
+          if ("lastError" in current) throw new Error(JSON.stringify(current));
+          return current.lastCompletedAt;
+        },
+        { timeout: 15_000 },
+      )
+      .toBeGreaterThan(0);
+    const completed = await state();
+    expect(completed.count).toBe(1);
+    // Playwright stores accepted downloads under generated names in downloadsPath.
+    const directory = path.join(userDataDir, "exports");
+    const files = await Promise.all(
+      (await readdir(directory)).map((name) =>
+        readFile(path.join(directory, name), "utf8"),
+      ),
+    );
+    expect(files).toHaveLength(3);
+    const jsonl = files.find((text) => text.startsWith('{"'))!;
+    const csv = files.find((text) => text.startsWith("\uFEFFschema_version"))!;
+    const manifest = JSON.parse(files.find((text) => text.startsWith("{\n"))!);
+    expect(JSON.parse(jsonl.trim())).toMatchObject({
+      source_text: 'Original, quoted "text"',
+      translated_text: "中文译文",
+    });
+    expect(csv).toContain('"Original, quoted ""text"""');
+    expect(manifest).toMatchObject({
+      records: 1,
+      paired_records: 1,
+      jsonl_sha256: createHash("sha256").update(jsonl).digest("hex"),
+    });
+    expect((await state()).folder).toBe(completed.folder);
   } finally {
     await context.close();
   }

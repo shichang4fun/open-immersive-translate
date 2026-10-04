@@ -1,5 +1,10 @@
 import browser from "webextension-polyfill";
 import {
+  registerWeeklyExport,
+  runWeeklyExport,
+  getWeeklyExportState,
+} from "./weekly-export";
+import {
   translationHistory,
   exportTranslationHistory,
 } from "./translation-history";
@@ -80,6 +85,7 @@ initTranslationServices();
 registerRemoteRules();
 initPdfInterception();
 registerChatgptOauthPolling();
+registerWeeklyExport();
 const pageBadges = new PageBadgeController(actionApi());
 
 async function configuredRule(url: string): Promise<Rule> {
@@ -249,6 +255,10 @@ browser.runtime.onMessage.addListener(
         return translationHistory.count().then((count) => ({ count }));
       case "exportTranslationHistory":
         return exportTranslationHistory(request.format);
+      case "runWeeklyTranslationExport":
+        return runWeeklyExport();
+      case "getWeeklyTranslationExportState":
+        return getWeeklyExportState();
       case "clearCache":
         return getTranslationCacheCount().then(async (cleared) => {
           await clearTranslationCache();

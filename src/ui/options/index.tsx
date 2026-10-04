@@ -1290,6 +1290,7 @@ function ShortcutsPanel(): preact.JSX.Element {
 function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
   const [historyCount, setHistoryCount] = useState<number>();
   const [historyStatus, setHistoryStatus] = useState<string>();
+  const [weeklyStatus, setWeeklyStatus] = useState<string>();
   const [cacheCount, setCacheCount] = useState<number>();
   const [cacheStatus, setCacheStatus] = useState<string>();
   const [redactApiKeys, setRedactApiKeys] = useState(true);
@@ -1302,6 +1303,16 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
     void sendToBackground({ type: "getTranslationHistoryStats" })
       .then((result) => setHistoryCount(result?.count))
       .catch(() => setHistoryCount(undefined));
+    void sendToBackground({ type: "getWeeklyTranslationExportState" })
+      .then((state) => {
+        if (state?.lastError)
+          setWeeklyStatus(`最近备份失败：${state.lastError}`);
+        else if (state?.lastCompletedAt)
+          setWeeklyStatus(
+            `最近备份：${new Date(state.lastCompletedAt).toLocaleString()}，${state.count} 条记录。`,
+          );
+      })
+      .catch(() => setWeeklyStatus("备份状态暂不可用"));
     void getCacheCount()
       .then(setCacheCount)
       .catch(() => setCacheCount(undefined));
@@ -1386,6 +1397,23 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
         <p class="ui-status">
           保存原文、译文、来源网址、标题、语言、请求的翻译服务及保存时间。记录保存在本机，清空缓存不会删除这些记录。
         </p>
+        <Toggle
+          checked={config.weeklyTranslationExport}
+          label="每周自动导出翻译记录"
+          onChange={(weeklyTranslationExport) =>
+            void onPatch({ weeklyTranslationExport })
+          }
+        />
+        <p class="ui-status">
+          每周日北京时间 23:00 由插件后台导出 JSONL、CSV 和校验文件，到 Chrome
+          下载目录的 open-immersive-translate/weekly 文件夹。关闭 Chrome
+          错过后，下次启动补一次。无需 Codex 或模型调用，不会发起新翻译。
+        </p>
+        {weeklyStatus && (
+          <p class="ui-status" role="status">
+            {weeklyStatus}
+          </p>
+        )}
         <p>
           {historyCount === undefined
             ? "记录统计暂不可用"

@@ -37,6 +37,15 @@ export interface TranslationHistoryRecord {
 
 export type TranslationHistoryFormat = "jsonl" | "csv";
 
+export interface WeeklyExportState {
+  nextDue: number;
+  lastCompletedAt?: number;
+  lastAttemptAt?: number;
+  lastError?: string;
+  folder?: string;
+  count?: number;
+}
+
 export interface TranslationHistoryExport {
   filename: string;
   mimeType: string;

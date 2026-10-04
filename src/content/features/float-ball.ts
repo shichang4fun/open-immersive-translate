@@ -95,6 +95,7 @@ export function init(ctx: FeatureContext): () => void {
       <button type="button" role="menuitem" data-action="translation-only">仅译文</button>
       <button type="button" role="menuitem" data-action="history-jsonl">导出翻译记录 JSONL</button>
       <button type="button" role="menuitem" data-action="history-csv">导出翻译记录 CSV</button>
+      <button type="button" role="menuitem" data-action="weekly-backup">立即保存每周备份</button>
       <button type="button" role="menuitem" data-action="never-site">从不翻译此站</button>
     </div>
   `;
@@ -219,6 +220,25 @@ export function init(ctx: FeatureContext): () => void {
         })
         .catch(() => {
           window.alert("导出失败：请稍后重试。翻译记录仍保存在本机。");
+        });
+      return;
+    }
+
+    if (action === "weekly-backup") {
+      void sendToBackground({ type: "runWeeklyTranslationExport" })
+        .then(async (result) => {
+          const config = await sendToBackground({ type: "getConfig" });
+          const next = config.weeklyTranslationExport
+            ? `\n下次自动备份：${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "short", timeStyle: "short" }).format(result.nextDue)}（北京时间）`
+            : "\n每周自动备份已关闭。";
+          window.alert(
+            `已保存 ${result.count} 条记录到 Chrome 下载目录：\n${result.folder}${next}`,
+          );
+        })
+        .catch(() => {
+          window.alert(
+            "备份失败：请在插件设置中查看导出状态。已有记录仍保存在本机。",
+          );
         });
       return;
     }

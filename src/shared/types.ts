@@ -383,6 +383,7 @@ export interface Config {
   remoteRules: RemoteRuleSubscription[];
   searchEnhancement: { enabled: boolean };
   saveTranslationHistory: boolean;
+  weeklyTranslationExport: boolean;
   cache: {
     enabled: boolean;
     maxAgeDays: number;

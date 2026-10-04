@@ -109,9 +109,9 @@ export class TranslationHistory {
 export const translationHistory = new TranslationHistory();
 
 /** Recover old cache entries without inventing the missing original or provenance. */
-export async function exportTranslationHistory(
-  format: TranslationHistoryFormat,
-): Promise<TranslationHistoryExport> {
+export async function translationHistoryRecords(): Promise<
+  TranslationHistoryRecord[]
+> {
   const [records, cached] = await Promise.all([
     translationHistory.records(),
     translationCache.records(),
@@ -140,5 +140,11 @@ export async function exportTranslationHistory(
       translated_text_format: "placeholders",
     });
   }
-  return formatTranslationHistory(records, format);
+  return records;
+}
+
+export async function exportTranslationHistory(
+  format: TranslationHistoryFormat,
+): Promise<TranslationHistoryExport> {
+  return formatTranslationHistory(await translationHistoryRecords(), format);
 }

@@ -402,6 +402,7 @@ export const configSchema: z.ZodType<Config> = z.object({
     })
     .default({ enabled: true, maxAgeDays: 30 }),
   saveTranslationHistory: z.boolean().default(true),
+  weeklyTranslationExport: z.boolean().default(true),
 });
 
 /** Defaults used when no configuration has been stored. */
