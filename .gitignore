@@ -5,3 +5,7 @@ dist-userscript/
 .vite/
 playwright-report/
 test-results/
+.env
+.env.*
+!.env.example
+local-private/

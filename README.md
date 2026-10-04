@@ -1,5 +1,7 @@
 # 开源版沉浸式翻译
 
+本仓库是 [shichang4fun 独立维护的 fork](https://github.com/shichang4fun/open-immersive-translate)，基于 [ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate)。`main` 包含个人使用所需的修改，目前包括 X 文章正文翻译修复、网页翻译记录存档和每周本机备份。开发和同步上游的方法见 [独立维护说明](docs/FORK_DEVELOPMENT.md)。
+
 **沉浸式翻译（Immersive Translate）是闭源软件。** 它的 Chrome 扩展包是 12 MB 压缩混淆过的 JavaScript，没有源码、没有 source map，用户无法审计它发出了什么请求、无法修改它的行为，也无法在它停止维护时自救。
 
 这个仓库是一个从零编写、MIT 许可的开源替代品。功能对照它 1.32.7 版本逐项复刻（见 [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md)，105 项中 102 项完成），全部代码可读、可改、可自行构建。
