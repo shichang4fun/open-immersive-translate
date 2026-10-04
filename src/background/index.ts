@@ -1,4 +1,8 @@
 import browser from "webextension-polyfill";
+import {
+  translationHistory,
+  exportTranslationHistory,
+} from "./translation-history";
 
 import { init as initPdfInterception } from "../pdf/intercept";
 import {
@@ -235,6 +239,16 @@ browser.runtime.onMessage.addListener(
         return importCodexCliAuth(request.json);
       case "getCacheStats":
         return getTranslationCacheCount().then((count) => ({ count }));
+      case "saveTranslationHistory":
+        return loadConfig().then(async (config) => {
+          if (!config.saveTranslationHistory) return { saved: false };
+          await translationHistory.save(request.record);
+          return { saved: true };
+        });
+      case "getTranslationHistoryStats":
+        return translationHistory.count().then((count) => ({ count }));
+      case "exportTranslationHistory":
+        return exportTranslationHistory(request.format);
       case "clearCache":
         return getTranslationCacheCount().then(async (cleared) => {
           await clearTranslationCache();

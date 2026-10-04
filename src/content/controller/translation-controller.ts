@@ -6,11 +6,13 @@ import type {
 } from "../../shared/j-types";
 import {
   connectTranslatePort,
+  sendToBackground,
   type ContentTranslatePort,
   type ParagraphTranslationResult,
   type TranslatePortMessage,
   type TranslateResultMessage,
 } from "../../shared/messages";
+import type { TranslationHistoryInput } from "../../shared/translation-history";
 import { normalizeLang } from "../../shared/lang";
 import type {
   Config,
@@ -59,9 +61,14 @@ import type { PageControllerActions } from "./commands";
 
 const PLACEHOLDER_STYLE = { open: "{", close: "}" } as const;
 const RECONNECT_DELAY_MS = 250;
+type HistoryContext = Omit<
+  TranslationHistoryInput,
+  "paragraph_id" | "paragraph_index" | "source_text" | "translated_text"
+>;
 
 interface PendingRequest {
   message: TranslatePortMessage;
+  historyContext?: HistoryContext;
   remaining: Set<string>;
   resolve(): void;
 }
@@ -520,6 +527,7 @@ export class TranslationController implements PageControllerActions {
     return new Promise((resolve) => {
       this.requests.set(requestId, {
         message,
+        historyContext: this.historyContext(),
         remaining: new Set(paragraphs.map(({ id }) => id)),
         resolve,
       });
@@ -532,6 +540,7 @@ export class TranslationController implements PageControllerActions {
     priority: TranslationPriority,
   ): Promise<void> {
     const generation = this.generation;
+    const historyContext = this.historyContext();
     this.pendingIds.add(paragraph.id);
     this.errorIds.delete(paragraph.id);
     setLoading(paragraph);
@@ -559,6 +568,7 @@ export class TranslationController implements PageControllerActions {
         paragraph,
         joinPreLikeTranslation(lines, translations),
         false,
+        historyContext,
       );
     } catch {
       if (generation !== this.generation) return;
@@ -678,7 +688,7 @@ export class TranslationController implements PageControllerActions {
         if (result.error) waiter.reject(new Error(result.error.message));
         else waiter.resolve(result.text ?? "");
       } else {
-        this.renderResult(result);
+        this.renderResult(result, request.historyContext);
       }
     }
     if (!request.remaining.size) {
@@ -708,7 +718,10 @@ export class TranslationController implements PageControllerActions {
     this.emitState();
   }
 
-  private renderResult(result: ParagraphTranslationResult): void {
+  private renderResult(
+    result: ParagraphTranslationResult,
+    historyContext?: HistoryContext,
+  ): void {
     this.pendingIds.delete(result.id);
     const paragraph = this.paragraphs.get(result.id);
     if (!paragraph) return;
@@ -720,19 +733,24 @@ export class TranslationController implements PageControllerActions {
       this.emitState();
       return;
     }
-    this.renderText(paragraph, result.text ?? "", true);
+    this.renderText(paragraph, result.text ?? "", true, historyContext);
   }
 
   private renderText(
     paragraph: AdvancedParagraph,
     text: string,
     decode: boolean,
+    historyContext: HistoryContext = this.historyContext(),
   ): void {
     try {
       const fragment = decode
         ? decodePlaceholders(text, paragraph.placeholders, PLACEHOLDER_STYLE)
         : document.createDocumentFragment();
       if (!decode) fragment.append(text);
+      const sourceText = paragraph.nodes
+        .map((node) => node.textContent ?? "")
+        .join("");
+      const translatedText = fragment.textContent ?? "";
       renderTranslation(paragraph as Paragraph, fragment, {
         mode: this.currentMode(),
         theme: this.currentTheme(),
@@ -757,6 +775,27 @@ export class TranslationController implements PageControllerActions {
       this.pendingIds.delete(paragraph.id);
       this.errorIds.delete(paragraph.id);
       this.renderedIds.add(paragraph.id);
+      if (
+        this.config.saveTranslationHistory &&
+        sourceText.trim() &&
+        translatedText.trim()
+      ) {
+        void sendToBackground({
+          type: "saveTranslationHistory",
+          record: {
+            ...historyContext,
+            paragraph_id: paragraph.id,
+            paragraph_index: Array.from(this.paragraphs.keys()).indexOf(
+              paragraph.id,
+            ),
+            source_text: sourceText,
+            translated_text: translatedText,
+          },
+        }).catch((error: unknown) => {
+          console.warn("[imt] Translation history was not saved", error);
+          document.dispatchEvent(new Event("imt-history-save-error"));
+        });
+      }
     } catch {
       this.pendingIds.delete(paragraph.id);
       this.errorIds.add(paragraph.id);
@@ -769,5 +808,16 @@ export class TranslationController implements PageControllerActions {
 
   private emitState(): void {
     this.reportState?.(this.state());
+  }
+
+  private historyContext(): HistoryContext {
+    return {
+      url: window.location.href,
+      title: document.title,
+      source_language: this.config.sourceLanguage,
+      target_language: this.config.targetLanguage,
+      requested_service:
+        this.runtimeService ?? this.rule.service ?? this.config.service,
+    };
   }
 }

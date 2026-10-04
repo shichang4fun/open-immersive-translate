@@ -26,7 +26,7 @@ export interface TranslationCacheValue {
   ts: number;
 }
 
-interface CacheRecord extends TranslationCacheValue {
+export interface CacheRecord extends TranslationCacheValue {
   key: string;
 }
 
@@ -284,6 +284,19 @@ export class TranslationCache {
       this.useMemory();
       return this.memory.size;
     }
+  }
+
+  async records(): Promise<CacheRecord[]> {
+    if (!this.databaseFactory) {
+      return Array.from(this.memory, ([key, value]) => ({ key, ...value }));
+    }
+    const database = await this.openDatabase();
+    return requestResult(
+      database
+        .transaction(STORE_NAME, "readonly")
+        .objectStore(STORE_NAME)
+        .getAll(),
+    ) as Promise<CacheRecord[]>;
   }
 }
 

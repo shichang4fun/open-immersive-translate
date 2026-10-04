@@ -382,6 +382,7 @@ export interface Config {
   globalCustomCss: string;
   remoteRules: RemoteRuleSubscription[];
   searchEnhancement: { enabled: boolean };
+  saveTranslationHistory: boolean;
   cache: {
     enabled: boolean;
     maxAgeDays: number;

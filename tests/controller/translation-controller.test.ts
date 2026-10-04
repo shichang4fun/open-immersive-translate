@@ -8,6 +8,7 @@ const controllerStorage = vi.hoisted(() => ({
 }));
 const browserMock = vi.hoisted(() => ({
   runtime: {
+    sendMessage: vi.fn().mockResolvedValue({ saved: true }),
     connect: vi.fn(() => ({
       postMessage: vi.fn((message: unknown) => portPosts.push(message)),
       onMessage: {
@@ -147,6 +148,20 @@ describe("TranslationController", () => {
     expect(states).toHaveBeenCalledWith(
       expect.objectContaining({ status: "done" }),
     );
+    expect(browserMock.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "saveTranslationHistory",
+        record: expect.objectContaining({
+          url: window.location.href,
+          title: "Test article",
+          source_text:
+            "This is the main article and it contains enough words for detection.",
+          translated_text: "译文",
+          requested_service: advanced.service,
+          target_language: advanced.targetLanguage,
+        }),
+      }),
+    );
     controller.destroy();
   });
 
@@ -218,5 +233,108 @@ describe("TranslationController", () => {
       "  一\n\t二  ",
     );
     controller.destroy();
+  });
+
+  it("archives decoded rich text with the request's original page metadata", async () => {
+    vi.useFakeTimers();
+    document.title = "Original title";
+    document.body.innerHTML =
+      "<article><p>Read <a href='/source'>the original source</a> for a detailed explanation.</p></article>";
+    const controller = new TranslationController(config(), {
+      ...generalRule,
+      isTranslateTitle: false,
+    });
+    controller.start("main");
+    await vi.advanceTimersByTimeAsync(150);
+    const request = portPosts.find(
+      (item) => (item as { type?: string }).type === "translate",
+    ) as { requestId: string; paragraphs: Array<{ id: string }> };
+    document.title = "Changed after request";
+    portListeners[0]?.({
+      type: "translateResult",
+      requestId: request.requestId,
+      results: [
+        {
+          id: request.paragraphs[0]!.id,
+          text: "阅读{1}原始来源{/1}以获取详细说明。",
+        },
+      ],
+      done: true,
+    });
+    expect(browserMock.runtime.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "saveTranslationHistory",
+        record: expect.objectContaining({
+          title: "Original title",
+          source_text: "Read the original source for a detailed explanation.",
+          translated_text: "阅读原始来源以获取详细说明。",
+          paragraph_index: 0,
+        }),
+      }),
+    );
+    controller.destroy();
+  });
+
+  it("does not archive records after saving is disabled", async () => {
+    vi.useFakeTimers();
+    document.body.innerHTML =
+      "<article><p>This paragraph has enough words for reliable source language detection.</p></article>";
+    const controller = new TranslationController(
+      { ...config(), saveTranslationHistory: false },
+      { ...generalRule, isTranslateTitle: false },
+    );
+    controller.start("main");
+    await vi.advanceTimersByTimeAsync(150);
+    const request = portPosts.find(
+      (item) => (item as { type?: string }).type === "translate",
+    ) as { requestId: string; paragraphs: Array<{ id: string }> };
+    portListeners[0]?.({
+      type: "translateResult",
+      requestId: request.requestId,
+      results: [{ id: request.paragraphs[0]!.id, text: "成功的译文" }],
+      done: true,
+    });
+    expect(document.querySelector('[data-imt="target"]')?.textContent).toBe(
+      "成功的译文",
+    );
+    expect(browserMock.runtime.sendMessage).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("keeps a successful translation visible and reports a failed archive write", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const saveError = vi.fn();
+    document.addEventListener("imt-history-save-error", saveError, {
+      once: true,
+    });
+    browserMock.runtime.sendMessage.mockRejectedValueOnce(
+      new Error("Storage is full"),
+    );
+    document.body.innerHTML =
+      "<article><p>This paragraph has enough words for reliable source language detection.</p></article>";
+    const controller = new TranslationController(config(), {
+      ...generalRule,
+      isTranslateTitle: false,
+    });
+    controller.start("main");
+    await vi.advanceTimersByTimeAsync(150);
+    const request = portPosts.find(
+      (item) => (item as { type?: string }).type === "translate",
+    ) as { requestId: string; paragraphs: Array<{ id: string }> };
+    portListeners[0]?.({
+      type: "translateResult",
+      requestId: request.requestId,
+      results: [{ id: request.paragraphs[0]!.id, text: "成功的译文" }],
+      done: true,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector('[data-imt="target"]')?.textContent).toBe(
+      "成功的译文",
+    );
+    expect(saveError).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledOnce();
+    controller.destroy();
+    warn.mockRestore();
   });
 });

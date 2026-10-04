@@ -135,6 +135,13 @@ describe("Options", () => {
       level: 2,
     });
     expect(screen.getByRole("heading", { name: "翻译缓存" })).toBeTruthy();
+    expect(
+      screen.getByRole("checkbox", { name: "自动保存网页翻译记录" }),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "自动保存网页翻译记录" }),
+    );
+    await waitFor(() => expect(stored.saveTranslationHistory).toBe(false));
   });
 
   it("warns when the service card does not support the selected pair", async () => {

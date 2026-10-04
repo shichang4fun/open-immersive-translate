@@ -1,4 +1,9 @@
 import browser from "webextension-polyfill";
+import type {
+  TranslationHistoryInput,
+  TranslationHistoryFormat,
+  TranslationHistoryExport,
+} from "./translation-history";
 
 import type { PageCommandId } from "./j-types";
 import type { AssistantRequest } from "./k-assistant";
@@ -166,6 +171,20 @@ export interface GetCacheStatsMessage {
   type: "getCacheStats";
 }
 
+export interface SaveTranslationHistoryMessage {
+  type: "saveTranslationHistory";
+  record: TranslationHistoryInput;
+}
+
+export interface GetTranslationHistoryStatsMessage {
+  type: "getTranslationHistoryStats";
+}
+
+export interface ExportTranslationHistoryMessage {
+  type: "exportTranslationHistory";
+  format: TranslationHistoryFormat;
+}
+
 export interface ClearCacheMessage {
   type: "clearCache";
 }
@@ -315,6 +334,9 @@ export type Msg =
 
 /** Messages accepted through runtime.sendMessage by the background worker. */
 export type BackgroundRequest =
+  | SaveTranslationHistoryMessage
+  | GetTranslationHistoryStatsMessage
+  | ExportTranslationHistoryMessage
   | GetRuleMessage
   | TranslateMessage
   | CancelMessage
@@ -386,7 +408,13 @@ export type BackgroundResponse<T extends BackgroundRequest> =
                                 ? OpenSidePanelResult
                                 : T extends PageTranslationStateMessage
                                   ? PageTranslationStateAcknowledgement
-                                  : never;
+                                  : T extends SaveTranslationHistoryMessage
+                                    ? { saved: boolean }
+                                    : T extends GetTranslationHistoryStatsMessage
+                                      ? { count: number }
+                                      : T extends ExportTranslationHistoryMessage
+                                        ? TranslationHistoryExport
+                                        : never;
 
 /** Messages sent directly to a tab's content script. */
 export type TabMessage =

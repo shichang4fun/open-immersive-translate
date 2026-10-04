@@ -1,6 +1,7 @@
 import browser from "webextension-polyfill";
 
 import { sendToBackground } from "../../shared/messages";
+import { downloadTranslationHistory } from "../../shared/translation-history";
 import type { FeatureContext } from "./context";
 
 export const FLOAT_BALL_POSITION_KEY = "floatBallPos";
@@ -92,6 +93,8 @@ export function init(ctx: FeatureContext): () => void {
     <div class="menu" role="menu" hidden>
       <button type="button" role="menuitem" data-action="settings">设置</button>
       <button type="button" role="menuitem" data-action="translation-only">仅译文</button>
+      <button type="button" role="menuitem" data-action="history-jsonl">导出翻译记录 JSONL</button>
+      <button type="button" role="menuitem" data-action="history-csv">导出翻译记录 CSV</button>
       <button type="button" role="menuitem" data-action="never-site">从不翻译此站</button>
     </div>
   `;
@@ -206,6 +209,20 @@ export function init(ctx: FeatureContext): () => void {
       return;
     }
 
+    if (action === "history-jsonl" || action === "history-csv") {
+      void sendToBackground({
+        type: "exportTranslationHistory",
+        format: action === "history-jsonl" ? "jsonl" : "csv",
+      })
+        .then((file) => {
+          downloadTranslationHistory(file);
+        })
+        .catch(() => {
+          window.alert("导出失败：请稍后重试。翻译记录仍保存在本机。");
+        });
+      return;
+    }
+
     if (action === "translation-only") {
       void sendToBackground({
         type: "setConfig",
@@ -237,6 +254,10 @@ export function init(ctx: FeatureContext): () => void {
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === "Escape") closeMenu();
   };
+  const onHistorySaveError = (): void => {
+    button.title = "译文已显示，但保存翻译记录失败；请检查浏览器存储空间。";
+    host.dataset.historySaveError = "true";
+  };
 
   button.addEventListener("pointerdown", onPointerDown);
   button.addEventListener("click", onClick);
@@ -246,6 +267,7 @@ export function init(ctx: FeatureContext): () => void {
   window.addEventListener("pointerup", onPointerUp);
   document.addEventListener("pointerdown", onDocumentPointerDown);
   document.addEventListener("keydown", onKeyDown);
+  document.addEventListener("imt-history-save-error", onHistorySaveError);
 
   return () => {
     disposed = true;
@@ -257,6 +279,7 @@ export function init(ctx: FeatureContext): () => void {
     window.removeEventListener("pointerup", onPointerUp);
     document.removeEventListener("pointerdown", onDocumentPointerDown);
     document.removeEventListener("keydown", onKeyDown);
+    document.removeEventListener("imt-history-save-error", onHistorySaveError);
     host.remove();
   };
 }

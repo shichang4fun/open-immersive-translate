@@ -12,6 +12,9 @@ import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 
 interface ExtensionApi {
+  runtime: {
+    sendMessage(message: unknown): Promise<unknown>;
+  };
   storage: {
     local: {
       get(key: string): Promise<Record<string, unknown>>;
@@ -88,14 +91,24 @@ async function extensionWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker");
 }
 
-async function launchExtension(playwright: {
-  chromium: BrowserType;
-}): Promise<{ context: BrowserContext; worker: Worker; extensionId: string }> {
+async function launchExtension(
+  playwright: {
+    chromium: BrowserType;
+  },
+  profileDirectory?: string,
+): Promise<{
+  context: BrowserContext;
+  worker: Worker;
+  extensionId: string;
+  userDataDir: string;
+}> {
   const extensionPath = path.resolve("dist");
-  const userDataDir = path.join(
-    tmpdir(),
-    `bilingual-translator-e2e-${process.pid}-${++profileSequence}`,
-  );
+  const userDataDir =
+    profileDirectory ??
+    path.join(
+      tmpdir(),
+      `bilingual-translator-e2e-${process.pid}-${++profileSequence}`,
+    );
   const context = await playwright.chromium.launchPersistentContext(
     userDataDir,
     {
@@ -112,6 +125,7 @@ async function launchExtension(playwright: {
   return {
     context,
     worker,
+    userDataDir,
     extensionId: new URL(worker.url()).host,
   };
 }
@@ -267,6 +281,130 @@ test("translates article paragraphs once and restores the DOM", async ({
     await expect
       .poll(() => page.locator("body").innerHTML())
       .toBe(originalBody);
+  } finally {
+    await context.close();
+  }
+});
+
+test("archives paired translations across browser restart and cache clearing", async ({
+  playwright,
+}) => {
+  const first = await launchExtension(playwright);
+  let context = first.context;
+  let worker = first.worker;
+  let historyPage = await context.newPage();
+  await historyPage.goto(
+    `chrome-extension://${first.extensionId}/options.html#data`,
+  );
+  const stats = () =>
+    historyPage.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      return (await api.runtime.sendMessage({
+        type: "getTranslationHistoryStats",
+      })) as { count: number };
+    });
+  const exportRecords = () =>
+    historyPage.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      const file = (await api.runtime.sendMessage({
+        type: "exportTranslationHistory",
+        format: "jsonl",
+      })) as { text: string };
+      return file.text
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+    });
+  try {
+    await selectMockService(worker, { translateToPageEndImmediately: true });
+    let page = await context.newPage();
+    await page.goto(`${origin}/article.html`);
+    await expect
+      .poll(() => contentState(worker))
+      .toMatchObject({ ready: true });
+    await expect.poll(() => toggleActivePage(worker)).toBe(true);
+    await expect.poll(async () => (await stats()).count).toBeGreaterThan(0);
+    await expect
+      .poll(() => contentState(worker))
+      .toMatchObject({ active: true });
+    await expect(
+      page.locator("article > p font[data-imt='target']"),
+    ).toHaveCount(3);
+    await expect
+      .poll(
+        async () =>
+          (await exportRecords()).filter(
+            (record) =>
+              record.provenance === "page_translation" && record.source_text,
+          ).length,
+      )
+      .toBeGreaterThanOrEqual(3);
+    const saved = await exportRecords();
+    const count = (await stats()).count;
+    const csvDownloadWaiting = historyPage.waitForEvent("download");
+    await historyPage
+      .getByRole("button", { name: "导出翻译记录 CSV", exact: true })
+      .click();
+    const csvDownload = await csvDownloadWaiting;
+    const csvFilename = await csvDownload.path();
+    expect(csvFilename).not.toBeNull();
+    const csv = await readFile(csvFilename!, "utf8");
+    expect(csv.startsWith("\uFEFFschema_version,")).toBe(true);
+    expect(csv).toContain("source_text");
+    expect(csv).toContain("translated_text");
+    expect(csv).toContain("page_translation");
+    expect(
+      saved.filter((record) => record.provenance === "page_translation"),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          url: `${origin}/article.html`,
+          requested_service: "mock",
+          translated_text_format: "plain",
+        }),
+      ]),
+    );
+    expect(
+      saved.some((record) =>
+        String(record.source_text).includes("first paragraph"),
+      ),
+    ).toBe(true);
+    expect(
+      saved
+        .filter((record) => record.provenance === "page_translation")
+        .every((record) => !/\{\/?\d+\}/.test(String(record.translated_text))),
+    ).toBe(true);
+
+    await context.close();
+    const reopened = await launchExtension(playwright, first.userDataDir);
+    context = reopened.context;
+    worker = reopened.worker;
+    historyPage = await context.newPage();
+    await historyPage.goto(
+      `chrome-extension://${reopened.extensionId}/options.html#data`,
+    );
+    expect((await stats()).count).toBe(count);
+    page = await context.newPage();
+    await page.goto(`${origin}/article.html`);
+    await expect
+      .poll(() => contentState(worker))
+      .toMatchObject({ ready: true });
+    await expect.poll(() => toggleActivePage(worker)).toBe(true);
+    await expect(
+      page.locator("article > p font[data-imt='target']"),
+    ).toHaveCount(3);
+    expect((await stats()).count).toBe(count);
+    await historyPage.evaluate(async () => {
+      const api = (globalThis as unknown as ExtensionWorkerGlobal).chrome;
+      await api.runtime.sendMessage({ type: "clearCache" });
+    });
+    expect((await stats()).count).toBe(count);
+    expect(
+      (await exportRecords()).filter(
+        (record) => record.provenance === "page_translation",
+      ),
+    ).toHaveLength(count);
   } finally {
     await context.close();
   }

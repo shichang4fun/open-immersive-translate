@@ -1,4 +1,8 @@
 import { render } from "preact";
+import {
+  downloadTranslationHistory,
+  type TranslationHistoryFormat,
+} from "../../shared/translation-history";
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { builtinRules } from "../../background/rules/builtin-rules";
@@ -1284,6 +1288,8 @@ function ShortcutsPanel(): preact.JSX.Element {
 }
 
 function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
+  const [historyCount, setHistoryCount] = useState<number>();
+  const [historyStatus, setHistoryStatus] = useState<string>();
   const [cacheCount, setCacheCount] = useState<number>();
   const [cacheStatus, setCacheStatus] = useState<string>();
   const [redactApiKeys, setRedactApiKeys] = useState(true);
@@ -1293,10 +1299,28 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
   }>();
 
   useEffect(() => {
+    void sendToBackground({ type: "getTranslationHistoryStats" })
+      .then((result) => setHistoryCount(result?.count))
+      .catch(() => setHistoryCount(undefined));
     void getCacheCount()
       .then(setCacheCount)
       .catch(() => setCacheCount(undefined));
   }, []);
+
+  const exportHistory = async (
+    format: TranslationHistoryFormat,
+  ): Promise<void> => {
+    try {
+      const file = await sendToBackground({
+        type: "exportTranslationHistory",
+        format,
+      });
+      downloadTranslationHistory(file);
+      setHistoryStatus(`已导出 ${file.count} 条翻译记录。`);
+    } catch {
+      setHistoryStatus("导出失败，请稍后重试。");
+    }
+  };
 
   const clear = async (): Promise<void> => {
     try {
@@ -1351,6 +1375,40 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
 
   return (
     <div class="options-stack">
+      <Card title="翻译记录">
+        <Toggle
+          checked={config.saveTranslationHistory}
+          label="自动保存网页翻译记录"
+          onChange={(saveTranslationHistory) =>
+            void onPatch({ saveTranslationHistory })
+          }
+        />
+        <p class="ui-status">
+          保存原文、译文、来源网址、标题、语言、请求的翻译服务及保存时间。记录保存在本机，清空缓存不会删除这些记录。
+        </p>
+        <p>
+          {historyCount === undefined
+            ? "记录统计暂不可用"
+            : `完整记录：${historyCount} 条`}
+        </p>
+        <p class="ui-status">
+          导出也包含能恢复的旧缓存；缺失的原文和来源标记为空。JSONL
+          保留原始文本，CSV 便于表格分析。
+        </p>
+        <div class="data-row">
+          <Button onClick={() => void exportHistory("jsonl")}>
+            导出翻译记录 JSONL
+          </Button>
+          <Button onClick={() => void exportHistory("csv")}>
+            导出翻译记录 CSV
+          </Button>
+        </div>
+        {historyStatus && (
+          <p class="ui-status" role="status">
+            {historyStatus}
+          </p>
+        )}
+      </Card>
       <Card title={t("data.cache")}>
         <div class="form-grid two-columns">
           <Toggle
