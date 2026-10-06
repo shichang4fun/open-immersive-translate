@@ -1,22 +1,32 @@
-# 开源版沉浸式翻译
+# Open Immersive Translate · 独立维护版
 
-本仓库是 [shichang4fun 独立维护的 fork](https://github.com/shichang4fun/open-immersive-translate)，基于 [ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate)。`main` 包含个人使用所需的修改，目前包括 X 文章正文翻译修复、网页翻译记录存档和每周本机备份。开发和同步上游的方法见 [独立维护说明](docs/FORK_DEVELOPMENT.md)。
+本仓库是由 [shichang4fun](https://github.com/shichang4fun) 独立维护的开源双语翻译扩展，**直接 fork 自 [ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate)**，沿用 MIT 许可证。感谢原作者 ymcwiki 及上游贡献者提供的代码与文档基础。
 
-**沉浸式翻译（Immersive Translate）是闭源软件。** 它的 Chrome 扩展包是 12 MB 压缩混淆过的 JavaScript，没有源码、没有 source map，用户无法审计它发出了什么请求、无法修改它的行为，也无法在它停止维护时自救。
+它按段落提取网页正文，在原文旁显示译文，并支持 ChatGPT 账号授权翻译、PDF、视频字幕和多种翻译服务。首次安装默认使用免密钥的 Google 翻译服务，目标语言为简体中文。主要维护和验证环境为 Chromium 扩展；仓库也保留上游的 Firefox 与油猴构建入口，具体能力见 [功能对照](docs/FEATURE_PARITY.md)。
 
-这个仓库是一个从零编写、MIT 许可的开源替代品。功能对照它 1.32.7 版本逐项复刻（见 [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md)，105 项中 102 项完成），全部代码可读、可改、可自行构建。
+## 项目来源与引用声明
 
-- 和 immersivetranslate.com 没有任何关联，也不使用它的任何代码。
-- 没有账号系统、没有付费墙、没有埋点上报。翻译请求只发往你自己配置的服务。
-- **可以直接登录自己的 ChatGPT 账号翻译**（OAuth 设备码，不需要 API key），详见下文。
-- 支持 Chrome / Edge（MV3）、Firefox，以及油猴脚本版。
+| 来源 | 本项目中的用途 |
+|---|---|
+| [ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate) | 直接上游和主要代码来源，包括扩展架构、翻译服务、ChatGPT OAuth、PDF、字幕和初始文档；保留原 Git 历史与 [MIT 许可证](LICENSE) 中的原作者署名。 |
+| [Immersive Translate](https://immersivetranslate.com/) | 上游的功能对照对象；上游还转换了其扩展包中的部分站点配置，具体来源见文末“第三方参考与致谢”。 |
+| [Sider](https://sider.ai/) | 本分支设置页布局及视频双语开关的交互设计参考，相关界面由本分支实现。 |
+| [hermes-agent](https://github.com/nousresearch/hermes-agent) | 上游 README 声明的 ChatGPT OAuth 设备码登录实现参考。 |
 
-> 这个项目由 AI 编码代理（OpenAI Codex）在人工编排下完成，开发过程的任务书保留在 [docs/prompts/](docs/prompts/)。
+本仓库是社区独立维护的衍生项目，与上述产品及 OpenAI 不存在官方隶属或背书关系。源码继承、功能参考和 UI 设计参考的范围如上表所示。
 
+## 本分支的主要修改
 
-这是一个 Chrome Manifest V3 双语翻译扩展。它按段落提取网页正文，在原文旁显示译文，并支持仅译文、正文/整页范围、遮罩学习模式、动态页面、富文本占位符和站点规则。
+- 修复 X 文章正文提取与翻译。
+- 自动保存网页翻译记录，支持 JSONL / CSV 导出及配对本机程序后的每周备份。
+- 增加 ChatGPT Fast 请求选项、账号模型列表刷新及译文字号百分比缩放。
+- 重设计设置页和快捷弹窗，改善字号、深色模式与窄窗口布局。
+- 增加独立视频字幕开关，修复 YouTube 字幕加载、译文显示延迟和大段字幕遮挡问题。
+- 修复输入框语言菜单误触发等交互问题，补充单元测试和浏览器回归测试。
 
-首次安装默认使用免密钥的 Google 翻译服务，目标语言为简体中文。
+开发、功能边界和同步上游的方法见 [独立维护说明](docs/FORK_DEVELOPMENT.md)。本分支功能反馈请提交到 [本仓库 Issues](https://github.com/shichang4fun/open-immersive-translate/issues)；适合上游的通用修复会单独提交给原项目。
+
+> 上游保留了 AI 编码代理在人工编排下开发时使用的 [任务书](docs/prompts/)；本分支后续修改也使用了 OpenAI Codex 辅助开发。
 
 ## 原版是怎么闭源的
 
@@ -202,13 +212,16 @@ pnpm e2e
 
 Netflix、Prime Video、Disney+、HBO Max、Hulu、课程平台和社交视频字幕适配器均有捕获格式 fixture 的解析单测。真实第三方站点的登录态、DRM、当前字幕接口和播放器版本仍需在线验证，因此这些兼容项继续标记为实验性。
 
-## 与原版的关系和致谢
+## 第三方参考与致谢
 
-- 原版沉浸式翻译闭源；本项目只把它的公开功能列表当作对标目标，实现全部重写。
-- 内置站点规则里有 144 条由原版扩展包内公开的 `default_config.json` 站点规则（CSS 选择器等配置数据）经 [scripts/port-rules.ts](scripts/port-rules.ts) 转换而来，其余为手写。
-- ChatGPT 账号 OAuth 设备码登录流程参考了 [hermes-agent](https://github.com/nousresearch/hermes-agent)（MIT）的实现。
-- PDF 渲染使用 pdf.js，双语 PDF 导出使用 pdf-lib。
+- **直接上游**：[ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate)。本分支在其代码上继续开发，原作者与贡献者的工作保留在 Git 历史中。
+- **站点配置来源**：继承的上游说明记载，144 条内置站点规则由 Immersive Translate 扩展包的 `default_config.json`（CSS 选择器等配置数据）经 [scripts/port-rules.ts](scripts/port-rules.ts) 转换而来；本仓库保留此来源声明。
+- **OAuth 实现参考**：上游说明记载，ChatGPT 设备码登录流程参考了 [hermes-agent](https://github.com/nousresearch/hermes-agent)（MIT）的实现。
+- **UI 设计参考**：[Sider](https://sider.ai/) 的设置布局与视频双语开关交互。
+- **PDF 依赖**：渲染使用 [PDF.js](https://github.com/mozilla/pdf.js)，双语 PDF 导出使用 [pdf-lib](https://github.com/Hopding/pdf-lib)。其他直接依赖见 [package.json](package.json)，锁定版本见 [pnpm-lock.yaml](pnpm-lock.yaml)。
 
 ## 许可证
 
-MIT，见 [LICENSE](LICENSE)。
+本仓库代码沿用上游的 MIT 许可证，完整条款见 [LICENSE](LICENSE)，其中保留 `Copyright (c) 2026 ymcwiki` 原始版权声明。本分支新增和修改的代码也按 MIT 许可证提供。
+
+复制、修改或再分发本项目代码时，请按 MIT 条款保留原版权声明和许可文本。第三方依赖及其他来源材料适用各自的许可证或授权条件；上述来源署名不替代相应授权。
