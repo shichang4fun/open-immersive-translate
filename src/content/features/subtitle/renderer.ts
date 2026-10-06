@@ -31,6 +31,9 @@ export class SubtitleRenderer {
   private readonly translationLine: HTMLElement;
   private readonly badge: HTMLElement;
   private readonly nativeTracks: NativeTrackState[] = [];
+  private readonly nativeCaptionContainer: HTMLElement | null;
+  private readonly nativeCaptionVisibility: string;
+  private readonly nativeCaptionPriority: string;
   private readonly resizeObserver?: ResizeObserver;
   private cues: readonly BilingualSubtitleCue[] = [];
   private style: SubtitleConfig;
@@ -48,6 +51,20 @@ export class SubtitleRenderer {
     private readonly options: SubtitleRendererOptions = {},
   ) {
     this.style = { ...style };
+    this.nativeCaptionContainer =
+      media
+        .closest(".html5-video-player")
+        ?.querySelector<HTMLElement>(".ytp-caption-window-container") ?? null;
+    this.nativeCaptionVisibility =
+      this.nativeCaptionContainer?.style.getPropertyValue("visibility") ?? "";
+    this.nativeCaptionPriority =
+      this.nativeCaptionContainer?.style.getPropertyPriority("visibility") ??
+      "";
+    this.nativeCaptionContainer?.style.setProperty(
+      "visibility",
+      "hidden",
+      "important",
+    );
     this.host = document.createElement("div");
     this.host.dataset.imt = "subtitle-overlay";
     this.host.style.cssText =
@@ -58,9 +75,10 @@ export class SubtitleRenderer {
     sheet.textContent = `
       :host { all: initial; }
       .frame { position: absolute; inset: 0; pointer-events: none; font-family: system-ui, sans-serif; }
-      .caption { position: absolute; left: 50%; transform: translateX(-50%); width: max-content; max-width: 92%; box-sizing: border-box; border-radius: 6px; padding: .24em .55em; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.35; text-shadow: 0 1px 2px #000; pointer-events: auto; cursor: move; user-select: none; }
+      .caption { position: absolute; left: 50%; transform: translateX(-50%); width: max-content; max-width: 92%; max-height: 36%; overflow-y: auto; box-sizing: border-box; border-radius: 6px; padding: .24em .55em; text-align: center; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.35; text-shadow: 0 1px 2px #000; pointer-events: auto; cursor: move; user-select: none; }
       .caption[hidden] { display: none; }
       .source, .translation { display: block; }
+      .source[hidden], .translation[hidden] { display: none; }
       .badge { position: absolute; right: 6px; top: -20px; border-radius: 3px; padding: 1px 4px; background: #b45309; color: white; font: 10px/1.4 system-ui, sans-serif; }
       .badge[hidden] { display: none; }
     `;
@@ -93,6 +111,7 @@ export class SubtitleRenderer {
     window.addEventListener("scroll", this.onPlacementChange, true);
     document.addEventListener("fullscreenchange", this.onPlacementChange);
     this.box.addEventListener("pointerdown", this.onPointerDown);
+    if (!media.paused) this.onPlay();
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
     if (typeof ResizeObserver !== "undefined") {
@@ -145,6 +164,18 @@ export class SubtitleRenderer {
       } catch {
         // A detached native track may reject writes.
       }
+    }
+    if (
+      this.nativeCaptionContainer?.style.getPropertyValue("visibility") ===
+      "hidden"
+    ) {
+      if (this.nativeCaptionVisibility)
+        this.nativeCaptionContainer.style.setProperty(
+          "visibility",
+          this.nativeCaptionVisibility,
+          this.nativeCaptionPriority,
+        );
+      else this.nativeCaptionContainer.style.removeProperty("visibility");
     }
     this.host.remove();
   }
@@ -209,7 +240,7 @@ export class SubtitleRenderer {
   }
 
   private applyStyle(): void {
-    this.box.style.fontSize = `${Math.max(10, this.style.fontSize)}px`;
+    this.updateFontSize();
     this.box.style.backgroundColor = hexToRgba(
       this.style.backgroundColor,
       this.style.backgroundOpacity,
@@ -222,10 +253,17 @@ export class SubtitleRenderer {
     this.box.style.bottom = "";
     if (this.style.position === "top") this.box.style.top = "8%";
     else if (this.style.position === "center") this.box.style.top = "46%";
-    else this.box.style.bottom = "8%";
+    else this.box.style.bottom = "max(8%, 56px)";
+  }
+
+  private updateFontSize(): void {
+    const width = this.media.getBoundingClientRect().width;
+    const scale = width > 0 ? Math.min(1, width / 640) : 1;
+    this.box.style.fontSize = `${Math.max(10, this.style.fontSize * scale)}px`;
   }
 
   private updatePlacement(): void {
+    this.updateFontSize();
     const fullscreen = document.fullscreenElement;
     const container =
       fullscreen && fullscreen !== this.media && fullscreen.contains(this.media)

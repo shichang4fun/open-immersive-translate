@@ -58,7 +58,7 @@ export function resolveTranslationTheme(
   return rule.theme ?? config.theme;
 }
 
-function siteMatches(hostname: string, site: string): boolean {
+export function siteMatches(hostname: string, site: string): boolean {
   const normalized = site.trim().replace(/^\*\./, "").toLocaleLowerCase();
   const host = hostname.toLocaleLowerCase();
   return host === normalized || host.endsWith(`.${normalized}`);

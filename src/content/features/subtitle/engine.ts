@@ -7,6 +7,8 @@ import type { FeatureContext } from "../context";
 export const MAX_CUES_PER_BATCH = 50;
 export const MAX_CHARS_PER_BATCH = 4_000;
 export const DEFAULT_ROLLING_WINDOW_SECONDS = 60;
+export const MAX_DISPLAY_CHARS = 80;
+export const MAX_DISPLAY_SECONDS = 6;
 
 const SENTENCE_END = /[.!?。！？…][\]})"'”’]*$/;
 
@@ -23,26 +25,36 @@ function splitLongCue(cue: SubtitleCue, maxChars: number): SubtitleCue[] {
   const text = cue.text.trim();
   if (text.length <= maxChars) return [{ ...cue, text }];
   const pieces: SubtitleCue[] = [];
-  const count = Math.ceil(text.length / maxChars);
+  const chunks: string[] = [];
+  let remaining = text;
+  while (remaining.length > maxChars) {
+    const space = remaining.lastIndexOf(" ", maxChars);
+    const end = space >= maxChars / 2 ? space : maxChars;
+    chunks.push(remaining.slice(0, end));
+    remaining = remaining.slice(end).trimStart();
+  }
+  if (remaining) chunks.push(remaining);
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const duration = cue.end - cue.start;
-  for (let start = 0; start < text.length; start += maxChars) {
-    const index = pieces.length;
+  let offset = 0;
+  for (const chunk of chunks) {
     pieces.push({
       ...cue,
       id: undefined,
-      start: cue.start + (duration * index) / count,
-      end: cue.start + (duration * (index + 1)) / count,
-      text: text.slice(start, start + maxChars),
+      start: cue.start + (duration * offset) / total,
+      end: cue.start + (duration * (offset + chunk.length)) / total,
+      text: chunk,
     });
+    offset += chunk.length;
   }
   return pieces;
 }
 
-/** Join short source cues into sentence-level translation batches. */
+/** Join nearby fragments for display, independently of API batch limits. */
 export function batchCueSentences(
   input: readonly SubtitleCue[],
-  maxCues = MAX_CUES_PER_BATCH,
-  maxChars = MAX_CHARS_PER_BATCH,
+  maxCues = 3,
+  maxChars = MAX_DISPLAY_CHARS,
 ): SubtitleCue[] {
   const cues = input
     .filter(validCue)
@@ -57,7 +69,7 @@ export function batchCueSentences(
     batches.push({
       id: current.length === 1 ? current[0].id : undefined,
       start: current[0].start,
-      end: current[current.length - 1].end,
+      end: Math.max(...current.map((cue) => cue.end)),
       text: current.map((cue) => cue.text.trim()).join(" "),
     });
     current = [];
@@ -66,7 +78,13 @@ export function batchCueSentences(
 
   for (const cue of cues) {
     const nextChars = chars + (current.length ? 1 : 0) + cue.text.length;
-    if (current.length && (current.length >= maxCues || nextChars > maxChars)) {
+    if (
+      current.length &&
+      (current.length >= maxCues ||
+        nextChars > maxChars ||
+        cue.end - current[0].start > MAX_DISPLAY_SECONDS ||
+        cue.start - current[current.length - 1].end > 0.75)
+    ) {
       flush();
     }
     current.push(cue);
@@ -92,6 +110,7 @@ export class SubtitleEngine {
   >();
   private cues: BilingualSubtitleCue[] = [];
   private generation = 0;
+  private disposed = false;
   private preTranslation: boolean;
   private readonly rollingWindowSeconds: number;
 
@@ -122,6 +141,7 @@ export class SubtitleEngine {
   }
 
   async load(input: readonly SubtitleCue[]): Promise<void> {
+    if (this.disposed) return;
     const generation = ++this.generation;
     this.cues = batchCueSentences(input).map((cue, index) => ({
       ...cue,
@@ -137,6 +157,7 @@ export class SubtitleEngine {
   }
 
   async setPreTranslation(enabled: boolean): Promise<void> {
+    if (this.disposed) return;
     this.preTranslation = enabled;
     if (enabled) {
       await this.translateIndices(
@@ -147,7 +168,7 @@ export class SubtitleEngine {
   }
 
   async updateCurrentTime(currentTime: number): Promise<void> {
-    if (this.preTranslation) return;
+    if (this.disposed || this.preTranslation) return;
     const windowEnd = currentTime + this.rollingWindowSeconds;
     const indices = this.cues.flatMap((cue, index) =>
       cue.end >= currentTime && cue.start <= windowEnd ? [index] : [],
@@ -160,6 +181,12 @@ export class SubtitleEngine {
       (item) => item.start <= currentTime && currentTime < item.end,
     );
     return cue ? { ...cue } : undefined;
+  }
+
+  dispose(): void {
+    this.disposed = true;
+    this.generation += 1;
+    this.listeners.clear();
   }
 
   private async translateIndices(
@@ -187,6 +214,7 @@ export class SubtitleEngine {
     if (batch.length) batches.push(batch);
 
     for (const item of batches) {
+      if (this.disposed || generation !== this.generation) return;
       await Promise.all(
         item.map(async (index) => {
           const cue = this.cues[index];

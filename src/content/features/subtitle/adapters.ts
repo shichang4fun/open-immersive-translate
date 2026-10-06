@@ -123,7 +123,7 @@ function trackSource(document: Document): SubtitleCueSource {
     subscribe(listener) {
       const modes = new Map<TextTrack, TextTrackMode>();
       const hashes = new WeakMap<HTMLTrackElement, string>();
-      const listened = new WeakSet<HTMLTrackElement>();
+      const listened = new Set<HTMLTrackElement>();
 
       const scan = (): void => {
         for (const element of document.querySelectorAll(
@@ -140,7 +140,9 @@ function trackSource(document: Document): SubtitleCueSource {
           }
           if (!modes.has(track)) modes.set(track, track.mode);
           try {
-            track.mode = "hidden";
+            // Load disabled tracks without suppressing the player's own captions.
+            // The renderer owns hiding/restoring a showing track while enabled.
+            if (track.mode === "disabled") track.mode = "hidden";
           } catch {
             // A managed player may expose a read-only mode.
           }
@@ -177,6 +179,9 @@ function trackSource(document: Document): SubtitleCueSource {
       return () => {
         observer.disconnect();
         window.clearInterval(interval);
+        for (const element of listened) {
+          element.removeEventListener("load", scan);
+        }
         for (const [track, mode] of modes) {
           try {
             track.mode = mode;

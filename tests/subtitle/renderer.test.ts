@@ -24,6 +24,26 @@ function pointer(type: string, x: number, y: number): Event {
 }
 
 describe("SubtitleRenderer", () => {
+  it("hides YouTube's caption layer only for its own player and restores it", () => {
+    document.body.innerHTML =
+      '<div class="html5-video-player"><video></video><div class="ytp-caption-window-container" style="visibility:visible!important">Native captions</div></div><div class="ytp-caption-window-container">Other player</div>';
+    const video = document.querySelector("video")!;
+    const native = document.querySelector<HTMLElement>(
+      ".ytp-caption-window-container",
+    )!;
+    const renderer = new SubtitleRenderer(video, DEFAULT_SUBTITLE_CONFIG);
+    expect(native.style.visibility).toBe("hidden");
+    expect(
+      (
+        document.querySelectorAll(
+          ".ytp-caption-window-container",
+        )[1] as HTMLElement
+      ).style.visibility,
+    ).toBe("");
+    renderer.dispose();
+    expect(native.style.visibility).toBe("visible");
+  });
+
   it("renders display modes inside a shadow root and hides native tracks", () => {
     const video = document.createElement("video");
     document.body.append(video);

@@ -94,6 +94,178 @@ async function extensionWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker");
 }
 
+test("video subtitles have a persistent switch, bounded captions and native restoration", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, {
+      subtitle: { enabled: false, preTranslation: false },
+    });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    // Real media metadata and TextTrack loading, without an external service.
+    const samples = 8000 * 30;
+    const wav = Buffer.alloc(44 + samples, 128);
+    wav.write("RIFF", 0);
+    wav.writeUInt32LE(36 + samples, 4);
+    wav.write("WAVEfmt ", 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(8000, 24);
+    wav.writeUInt32LE(8000, 28);
+    wav.writeUInt16LE(1, 32);
+    wav.writeUInt16LE(8, 34);
+    wav.write("data", 36);
+    wav.writeUInt32LE(samples, 40);
+    const cues = Array.from(
+      { length: 15 },
+      (_, i) =>
+        `${i + 1}\n00:00:${String(i * 2).padStart(2, "0")}.000 --> 00:00:${String(i * 2 + 2).padStart(2, "0")}.000\ncaption ${i} with automatic words and no final punctuation`,
+    ).join("\n\n");
+    await page.route("**/captions.vtt", (route) =>
+      route.fulfill({ contentType: "text/vtt", body: `WEBVTT\n\n${cues}\n` }),
+    );
+    await page.route("**/video.html", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>视频字幕开关验证</title>
+      <style>body{margin:0;background:#f5f6f4;color:#202d29;font:18px system-ui}main{max-width:960px;margin:48px auto;padding:0 20px}.player{position:relative;background:#152421;border-radius:12px;overflow:hidden}video{width:100%;height:500px;display:block;background:#152421}.title{position:absolute;top:28px;left:30px;color:#dde9e3;pointer-events:none}.ytp-right-controls{height:44px;display:flex;justify-content:flex-end;background:#202a26;padding-right:12px}.player:fullscreen video{height:calc(100vh - 44px)}@media(max-width:500px){video{height:260px}}</style>
+      <main><h1>视频双语字幕</h1><p>使用播放器中的「译 · 双语」开关，独立控制字幕翻译。</p><div class="player html5-video-player"><video src="data:audio/wav;base64,${wav.toString("base64")}" preload="auto" controls><track src="/captions.vtt" kind="subtitles" srclang="en" label="English" default></video><div class="title">字幕显示与开关回归测试</div><div class="ytp-right-controls"></div></div></main></html>`,
+      }),
+    );
+    await page.goto(`${origin}/video.html`);
+    // Real Chromium validates CSS priority; JSDOM does not preserve it.
+    await page.evaluate(() => {
+      const native = document.createElement("div");
+      native.className = "ytp-caption-window-container";
+      native.style.setProperty("visibility", "visible", "important");
+      document.querySelector(".player")!.append(native);
+    });
+    const toggle = page.getByRole("switch", {
+      name: /双语字幕|Bilingual subtitles/,
+    });
+    const overlay = page.locator('[data-imt="subtitle-overlay"]');
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector("video")!.textTracks[0]?.cues?.length,
+        ),
+      )
+      .toBe(15);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector("video")!.textTracks[0].mode,
+        ),
+      )
+      .toBe("showing");
+    await expect(overlay).toHaveCount(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(overlay.locator(".translation")).toContainText("[zh]");
+    await expect(page.locator(".ytp-caption-window-container")).toHaveCSS("visibility", "hidden");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector("video")!.textTracks[0].mode,
+        ),
+      )
+      .toBe("hidden");
+    expect(
+      (await overlay.locator(".source").innerText()).length,
+    ).toBeLessThanOrEqual(80);
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.querySelector("video")!.readyState),
+      )
+      .toBeGreaterThanOrEqual(4);
+    await page.evaluate(() => {
+      document.querySelector("video")!.currentTime = 16;
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => ({
+          time: document.querySelector("video")!.currentTime,
+          duration: document.querySelector("video")!.duration,
+          error: document.querySelector("video")!.error?.message,
+        })),
+      )
+      .toMatchObject({ time: 16 });
+    await expect(overlay.locator(".source")).toContainText("caption 8");
+    const box = await overlay.locator(".caption").boundingBox();
+    expect(box!.height).toBeLessThanOrEqual(180);
+    await page.screenshot({
+      path: testInfo.outputPath("video-subtitles-on.png"),
+      fullPage: true,
+    });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(overlay).toHaveCount(0);
+    await expect(page.locator(".ytp-caption-window-container")).toHaveCSS("visibility", "visible");
+    expect(await page.locator(".ytp-caption-window-container").evaluate((node) =>
+      (node as HTMLElement).style.getPropertyPriority("visibility"),
+    )).toBe("important");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.querySelector("video")!.textTracks[0].mode,
+        ),
+      )
+      .toBe("showing");
+    await page.reload();
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(overlay).toHaveCount(0);
+    await toggle.press("Space");
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(overlay.locator(".translation")).toContainText("[zh]");
+    await page.evaluate(() =>
+      document.querySelector(".player")!.requestFullscreen(),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          document.fullscreenElement?.contains(
+            document.querySelector('[data-imt="subtitle-overlay"]'),
+          ),
+        ),
+      )
+      .toBe(true);
+    await expect(toggle).toBeVisible();
+    await page.evaluate(() => document.exitFullscreen());
+    await page.setViewportSize({ width: 390, height: 700 });
+    await expect(toggle).toBeVisible();
+    await expect.poll(() => overlay.locator(".caption").evaluate((box) =>
+      box.scrollHeight <= box.clientHeight,
+    )).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("video-subtitles-narrow.png"),
+      fullPage: true,
+    });
+    await page.evaluate(() =>
+      document.querySelector(".ytp-right-controls")!.remove(),
+    );
+    await expect(toggle).toBeVisible();
+    await toggle.click();
+    await expect(overlay).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath("video-subtitles-off.png"),
+      fullPage: true,
+    });
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 test("input translation avoids accidental language bars and preserves explicit commands", async ({
   playwright,
 }, testInfo) => {
@@ -404,6 +576,8 @@ async function selectMockService(
         subtitle: {
           ...(config.subtitle as Record<string, unknown>),
           youtube: false,
+          ...((configPatch.subtitle as Record<string, unknown> | undefined) ??
+            {}),
         },
       },
     });

@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   batchCueSentences,
   SubtitleEngine,
+  MAX_DISPLAY_CHARS,
+  MAX_DISPLAY_SECONDS,
 } from "../../src/content/features/subtitle/engine";
 import type { FeatureContext } from "../../src/content/features/context";
 
@@ -29,11 +31,63 @@ describe("SubtitleEngine", () => {
         text: "word",
       })),
     );
-    expect(many).toHaveLength(2);
-    expect(many[0].text.split(" ")).toHaveLength(50);
+    expect(many.length).toBeGreaterThan(2);
+    expect(
+      many.every((cue) => cue.end - cue.start <= MAX_DISPLAY_SECONDS),
+    ).toBe(true);
     expect(
       batchCueSentences([{ start: 0, end: 1, text: "a".repeat(4001) }]),
+    ).toHaveLength(Math.ceil(4001 / MAX_DISPLAY_CHARS));
+  });
+
+  it("keeps unpunctuated automatic captions short without filling silent gaps", () => {
+    const input = Array.from({ length: 50 }, (_, index) => ({
+      start: index * 2,
+      end: index * 2 + 2,
+      text: `caption ${index} has no sentence ending punctuation`,
+    }));
+    const output = batchCueSentences(input);
+    expect(output.every((cue) => cue.text.length <= MAX_DISPLAY_CHARS)).toBe(
+      true,
+    );
+    expect(
+      output.every((cue) => cue.end - cue.start <= MAX_DISPLAY_SECONDS),
+    ).toBe(true);
+    expect(output.map((cue) => cue.text).join(" ")).toBe(
+      input.map((cue) => cue.text).join(" "),
+    );
+    expect(
+      batchCueSentences([
+        { start: 0, end: 1, text: "before" },
+        { start: 10, end: 11, text: "after" },
+      ]),
     ).toHaveLength(2);
+  });
+
+  it("stops queued translation batches and ignores late results after disposal", async () => {
+    let resolve!: (value: string) => void;
+    const pending = new Promise<string>((done) => {
+      resolve = done;
+    });
+    const translateText = vi.fn(() => pending);
+    const engine = new SubtitleEngine(context(translateText));
+    const listener = vi.fn();
+    engine.subscribe(listener);
+    const loaded = engine.load(
+      Array.from({ length: 80 }, (_, i) => ({
+        start: i,
+        end: i + 1,
+        text: `Sentence ${i}.`,
+      })),
+    );
+    expect(translateText).toHaveBeenCalledTimes(50);
+    engine.dispose();
+    listener.mockClear();
+    resolve("译文");
+    await loaded;
+    await engine.updateCurrentTime(65);
+    expect(translateText).toHaveBeenCalledTimes(50);
+    expect(listener).not.toHaveBeenCalled();
   });
 
   it("pre-translates the whole track and reuses in-flight cache entries", async () => {
