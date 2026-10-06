@@ -107,6 +107,18 @@ function findEditable(target: EventTarget | null): EditableField | null {
     "input, textarea, [contenteditable]:not([contenteditable='false'])",
   );
   if (
+    !field ||
+    field.closest(
+      '[role="search"], [role="searchbox"], [data-testid="SearchBox_Search_Input"]',
+    ) ||
+    (field instanceof HTMLInputElement && field.type !== "text") ||
+    ((field instanceof HTMLInputElement ||
+      field instanceof HTMLTextAreaElement) &&
+      (field.disabled || field.readOnly))
+  ) {
+    return null;
+  }
+  if (
     field instanceof HTMLInputElement ||
     field instanceof HTMLTextAreaElement ||
     field instanceof HTMLElement
@@ -214,14 +226,25 @@ export function init(ctx: FeatureContext): () => void {
   let pending: PendingTranslation | null = null;
   let disposed = false;
   let targetBar: HTMLElement | null = null;
+  let targetField: EditableField | null = null;
+
+  const hasPrefixCommand = (value: string): boolean =>
+    value.startsWith("//") ||
+    !!readLanguagePrefix(
+      value,
+      config.input.languageAliases,
+      config.input.startingTriggerKey,
+    );
 
   const hideTargetBar = (): void => {
     targetBar?.remove();
     targetBar = null;
+    targetField = null;
   };
 
   const showTargetBar = (field: EditableField): void => {
     if (!config.input.showTargetBar) return;
+    if (targetField === field && targetBar?.isConnected) return;
     hideTargetBar();
     const host = document.createElement("div");
     host.dataset.imt = "input-target";
@@ -252,12 +275,15 @@ export function init(ctx: FeatureContext): () => void {
         : (config.input.targetLanguage ?? "en"));
     select.addEventListener("change", () => {
       selectedTargets.set(field, select.value as LangCode | "auto-target");
+      hideTargetBar();
+      field.focus();
     });
     const style = document.createElement("style");
     style.textContent = `:host{font:13px system-ui}select{min-width:150px;padding:7px 28px 7px 9px;border:1px solid #cbd5e1;border-radius:8px;color:#111827;background:#fff;box-shadow:0 4px 14px rgb(0 0 0 / 18%)}`;
     shadow.append(style, select);
     document.documentElement.append(host);
     targetBar = host;
+    targetField = field;
   };
 
   const cancelPending = (): void => {
@@ -324,9 +350,12 @@ export function init(ctx: FeatureContext): () => void {
   };
 
   const onKeyDown = (event: KeyboardEvent): void => {
-    if (event.key === "Escape" && pending) {
-      event.preventDefault();
-      cancelPending();
+    if (event.key === "Escape") {
+      hideTargetBar();
+      if (pending) {
+        event.preventDefault();
+        cancelPending();
+      }
       return;
     }
     if (event.isComposing || pending) return;
@@ -338,7 +367,7 @@ export function init(ctx: FeatureContext): () => void {
     if (
       event.key === "Enter" &&
       config.input.triggerMode !== "trailing" &&
-      value.startsWith(config.input.startingTriggerKey)
+      hasPrefixCommand(value)
     ) {
       event.preventDefault();
       keyTimes.delete(field);
@@ -353,7 +382,6 @@ export function init(ctx: FeatureContext): () => void {
     }
 
     if (config.input.triggerMode === "prefix") return;
-    showTargetBar(field);
 
     const now = Date.now();
     const times = (keyTimes.get(field) ?? []).filter(
@@ -387,29 +415,49 @@ export function init(ctx: FeatureContext): () => void {
   const onInput = (event: Event): void => {
     const field = findEditable(event.target);
     if (!field || config.input.triggerMode === "trailing") return;
-    if (fieldValue(field).startsWith(config.input.startingTriggerKey)) {
+    if (
+      !(event instanceof InputEvent && event.isComposing) &&
+      hasPrefixCommand(fieldValue(field))
+    ) {
       showTargetBar(field);
+    } else if (targetField === field) {
+      hideTargetBar();
     }
   };
 
-  const onFocusOut = (event: FocusEvent): void => {
-    const field = findEditable(event.target);
-    if (!field) return;
+  const onFocusOut = (): void => {
     setTimeout(() => {
-      if (!targetBar?.matches(":hover")) hideTargetBar();
+      if (disposed || !targetBar) return;
+      const active = document.activeElement;
+      if (active !== targetBar && !targetField?.contains(active))
+        hideTargetBar();
     }, 0);
+  };
+
+  const onPointerDown = (event: PointerEvent): void => {
+    if (!targetBar || !targetField) return;
+    const path = event.composedPath();
+    if (!path.includes(targetBar) && !path.includes(targetField))
+      hideTargetBar();
   };
 
   document.addEventListener("keydown", onKeyDown, true);
   document.addEventListener("input", onInput, true);
   document.addEventListener("focusout", onFocusOut, true);
+  document.addEventListener("pointerdown", onPointerDown, true);
+  document.addEventListener("scroll", hideTargetBar, true);
+  window.addEventListener("resize", hideTargetBar);
 
   return () => {
     disposed = true;
     cancelPending();
+    hideTargetBar();
     document.removeEventListener("keydown", onKeyDown, true);
     document.removeEventListener("input", onInput, true);
     document.removeEventListener("focusout", onFocusOut, true);
+    document.removeEventListener("pointerdown", onPointerDown, true);
+    document.removeEventListener("scroll", hideTargetBar, true);
+    window.removeEventListener("resize", hideTargetBar);
   };
 }
 

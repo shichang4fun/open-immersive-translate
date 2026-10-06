@@ -94,6 +94,87 @@ async function extensionWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker");
 }
 
+test("input translation avoids accidental language bars and preserves explicit commands", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, {
+      uiLanguage: "zh-CN",
+      input: { enabled: true, targetLanguage: "zh-CN" },
+    });
+    const page = await context.newPage();
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/input.html", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html lang="zh-CN"><meta charset="utf-8">
+        <title>输入框翻译交互验证</title>
+        <style>body{font:18px system-ui;max-width:760px;margin:64px auto;background:#f5f6f4;color:#202d29}label{display:block;margin-top:32px}input,textarea,[contenteditable]{display:block;box-sizing:border-box;width:100%;padding:16px;margin:12px 0;border:1px solid #ccc;border-radius:8px;background:white;font:18px system-ui}textarea{height:130px}button{padding:12px 24px}</style>
+        <h1>输入框翻译交互验证</h1>
+        <label>搜索<input type="search" aria-label="搜索"></label>
+        <label>正文<textarea aria-label="正文"></textarea></label>
+        <label>富文本编辑器<div contenteditable="true" role="textbox" aria-label="富文本编辑器"></div></label>
+        <button>其他区域</button></html>`,
+      }),
+    );
+    await page.goto(`${origin}/input.html`);
+    const editor = page.getByRole("textbox", { name: "正文", exact: true });
+    const bar = page.locator('[data-imt="input-target"]');
+    // The explicit command proves the extension is listening before negative checks.
+    await expect(async () => {
+      await editor.fill("//hello");
+      await expect(bar).toBeVisible({ timeout: 1000 });
+    }).toPass();
+    await editor.press("Escape");
+    await expect(bar).toHaveCount(0);
+    await editor.fill("hello");
+    await editor.pressSequentially(" world ");
+    await expect(bar).toHaveCount(0);
+    await expect(editor).toHaveValue("hello world ");
+    const search = page.getByRole("searchbox", { name: "搜索" });
+    await search.fill("//hello");
+    await search.press("Enter");
+    await search.pressSequentially("   ");
+    await expect(search).toHaveValue("//hello   ");
+    await expect(bar).toHaveCount(0);
+    await editor.fill("hello");
+    await editor.pressSequentially("   ", { delay: 50 });
+    await expect(editor).toHaveValue("[zh] hello");
+    await expect(bar).toHaveCount(0);
+    await editor.fill("//hello world");
+    await bar.locator("select").focus();
+    await expect(bar).toBeVisible();
+    await bar.locator("select").selectOption("ja");
+    await expect(editor).toBeFocused();
+    await expect(bar).toHaveCount(0);
+    await editor.press("Enter");
+    await expect(editor).toHaveValue("[zh] hello world");
+    await editor.fill("/en hello");
+    await expect(bar).toBeVisible();
+    await page.getByRole("button", { name: "其他区域" }).click();
+    await expect(bar).toHaveCount(0);
+    await editor.fill("//hello");
+    await expect(bar).toBeVisible();
+    await editor.fill("hello");
+    await expect(bar).toHaveCount(0);
+    const richEditor = page.getByRole("textbox", { name: "富文本编辑器" });
+    await richEditor.fill("//hello composer");
+    await expect(bar).toBeVisible();
+    await richEditor.press("Enter");
+    await expect(richEditor).toHaveText("[zh] hello composer");
+    await expect(bar).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath("input-translation.png"),
+      fullPage: true,
+    });
+    expect(errors).toEqual([]);
+  } finally {
+    await context.close();
+  }
+});
+
 test("persists ChatGPT Fast mode and can restore standard speed", async ({
   playwright,
 }, testInfo) => {
@@ -315,7 +396,11 @@ async function selectMockService(
         floatBall: { enabled: false, position: "right" },
         hover: { enabled: false, holdKey: "Alt" },
         selection: { enabled: false },
-        input: { enabled: false, trigger: "//" },
+        input: {
+          enabled: false,
+          trigger: "//",
+          ...((configPatch.input as Record<string, unknown> | undefined) ?? {}),
+        },
         subtitle: {
           ...(config.subtitle as Record<string, unknown>),
           youtube: false,
