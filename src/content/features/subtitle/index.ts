@@ -16,6 +16,7 @@ import { SubtitleEngine } from "./engine";
 import { subtitleText } from "./i18n";
 import { SubtitleRenderer } from "./renderer";
 import { SubtitleToggle } from "./player-toggle";
+import { YouTubeCaptions } from "./youtube-captions";
 import { siteMatches } from "../../controller/patterns";
 
 export const TOGGLE_SUBTITLE_PRETRANSLATION_MESSAGE =
@@ -81,10 +82,13 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const unsubscribers: Array<() => void> = [];
   let disposed = false;
   let saving = false;
+  let bridgeReady = false;
+  const youtubeCaptions = new YouTubeCaptions();
 
   const stopSessions = (): void => {
     for (const session of sessions.values()) session.dispose();
     sessions.clear();
+    youtubeCaptions.dispose();
   };
 
   const toggle = async (): Promise<void> => {
@@ -114,6 +118,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     for (const control of controls.values())
       control.setState(enabled(), false, failed);
     if (enabled()) replayTracks();
+    scanPlayers();
   };
 
   const acceptTrack = (track: SubtitleCueTrack): void => {
@@ -168,7 +173,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     };
     sessions.set(media, session);
     void engine
-      .load(track.cues)
+      .load(track.cues, media.currentTime)
       .then(updateRollingWindow)
       .catch(() => undefined);
   };
@@ -209,6 +214,8 @@ export function initSubtitles(ctx: FeatureContext): () => void {
         controls.set(media, control);
       }
       control.updatePlacement();
+      if (isYouTube && bridgeReady && enabled() && !saving)
+        youtubeCaptions.ensure(media, () => sessions.has(media));
     }
   };
 
@@ -219,8 +226,13 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const capturePatterns = adapters.flatMap(
     (adapter) => adapter.capturePatterns,
   );
-  const disposeBridge = installCaptureBridge(capturePatterns, (capture) =>
-    captureHub.emit(capture),
+  const disposeBridge = installCaptureBridge(
+    capturePatterns,
+    (capture) => captureHub.emit(capture),
+    () => {
+      bridgeReady = true;
+      scanPlayers();
+    },
   );
   const observer = new MutationObserver(scanPlayers);
   observer.observe(document.documentElement, {
@@ -228,10 +240,19 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     subtree: true,
   });
   document.addEventListener("loadedmetadata", scanPlayers, true);
+  document.addEventListener("loadeddata", scanPlayers, true);
   scanPlayers();
   replayTracks();
 
-  const onMessage = (message: unknown): undefined => {
+  const onMessage = (
+    message: unknown,
+  ): undefined | Promise<{ enabled: boolean }> => {
+    if (typeof message === "object" && message !== null && "type" in message) {
+      if (message.type === "getVideoSubtitleState")
+        return Promise.resolve({ enabled: enabled() });
+      if (message.type === "toggleVideoSubtitles")
+        return toggle().then(() => ({ enabled: enabled() }));
+    }
     if (
       typeof message !== "object" ||
       message === null ||
@@ -268,6 +289,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     disposed = true;
     observer.disconnect();
     document.removeEventListener("loadedmetadata", scanPlayers, true);
+    document.removeEventListener("loadeddata", scanPlayers, true);
     browser.runtime.onMessage.removeListener(onMessage);
     document.removeEventListener(
       "imt:video-subtitle-pretranslation",

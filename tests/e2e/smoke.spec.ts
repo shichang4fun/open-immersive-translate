@@ -94,6 +94,95 @@ async function extensionWorker(context: BrowserContext): Promise<Worker> {
   return context.serviceWorkers()[0] ?? context.waitForEvent("serviceworker");
 }
 
+test("YouTube loads captions with CC off and offers a compact independent popup switch", async ({
+  playwright,
+}, testInfo) => {
+  const { context, worker, extensionId } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, {
+      uiLanguage: "en",
+      subtitle: { enabled: true, youtube: true, preTranslation: true },
+    });
+    const samples = 8000 * 6;
+    const wav = Buffer.alloc(44 + samples, 128);
+    wav.write("RIFF", 0);
+    wav.writeUInt32LE(36 + samples, 4);
+    wav.write("WAVEfmt ", 8);
+    wav.writeUInt32LE(16, 16);
+    wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22);
+    wav.writeUInt32LE(8000, 24);
+    wav.writeUInt32LE(8000, 28);
+    wav.writeUInt16LE(1, 32);
+    wav.writeUInt16LE(8, 34);
+    wav.write("data", 36);
+    wav.writeUInt32LE(samples, 40);
+    const popup = await context.newPage();
+    const page = await context.newPage();
+    let captionRequests = 0;
+    await page.route("https://www.youtube.com/**", (route) => {
+      if (route.request().url().includes("/api/timedtext")) {
+        captionRequests += 1;
+        return route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            events:
+              captionRequests === 1
+                ? []
+                : [
+                    {
+                      tStartMs: 0,
+                      dDurationMs: 6000,
+                      segs: [{ utf8: "Hello from YouTube." }],
+                    },
+                  ],
+          }),
+        });
+      }
+      return route.fulfill({
+        contentType: "text/html",
+        body: `<!doctype html><html><meta charset="utf-8"><style>video{width:800px;height:450px;background:#222}.html5-video-player{position:relative}.ytp-right-controls{height:48px}</style><div class="html5-video-player"><video preload="auto" src="data:audio/wav;base64,${wav.toString("base64")}"></video><div class="ytp-caption-window-container">Native captions</div><div class="ytp-right-controls"><button class="ytp-subtitles-button" aria-pressed="false">CC</button></div></div><script>document.querySelector('button').onclick=function(){const on=this.getAttribute('aria-pressed')!=='true';this.setAttribute('aria-pressed',String(on));if(on){const xhr=new XMLHttpRequest();xhr.open('GET','https://www.youtube.com/api/timedtext?fmt=json3');xhr.send();}};</script></html>`,
+      });
+    });
+    await page.goto("https://www.youtube.com/watch?v=fixture");
+    const cc = page.locator(".ytp-subtitles-button");
+    await expect(cc).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.locator('[data-imt="subtitle-overlay"] .translation'),
+    ).toContainText("[zh] Hello from YouTube.", { timeout: 10000 });
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await page.bringToFront();
+    await popup.reload();
+    const toggle = popup.getByRole("checkbox", {
+      name: "Bilingual video subtitles",
+    });
+    await expect(toggle).toBeChecked();
+    const bounds = await popup.locator(".popup-shell").boundingBox();
+    expect(bounds!.width).toBe(380);
+    expect(bounds!.height).toBeLessThanOrEqual(600);
+    await popup.setViewportSize({
+      width: 380,
+      height: Math.ceil(bounds!.height),
+    });
+    await popup.screenshot({ path: testInfo.outputPath("popup-light.png") });
+    await popup.emulateMedia({ colorScheme: "dark" });
+    await popup.screenshot({ path: testInfo.outputPath("popup-dark.png") });
+    await toggle.uncheck();
+    await expect(page.locator('[data-imt="subtitle-overlay"]')).toHaveCount(0);
+    await expect(cc).toHaveAttribute("aria-pressed", "false");
+    await toggle.check();
+    await expect(
+      page.locator('[data-imt="subtitle-overlay"] .translation'),
+    ).toContainText("[zh] Hello from YouTube.");
+    await popup.getByRole("button", { name: "More", exact: true }).click();
+    await expect(popup.getByRole("menu")).toBeVisible();
+    await popup.keyboard.press("Escape");
+    await expect(popup.getByRole("menu")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
 test("video subtitles have a persistent switch, bounded captions and native restoration", async ({
   playwright,
 }, testInfo) => {

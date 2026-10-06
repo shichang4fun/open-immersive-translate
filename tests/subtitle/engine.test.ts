@@ -16,6 +16,57 @@ function context(translateText = vi.fn(async (text: string) => `译:${text}`)) {
 }
 
 describe("SubtitleEngine", () => {
+  it("publishes each translation without waiting for a slow neighbour", async () => {
+    let finish!: (value: string) => void;
+    const slow = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    const translateText = vi.fn((text: string) =>
+      text === "Slow." ? slow : Promise.resolve("快。"),
+    );
+    const engine = new SubtitleEngine(context(translateText));
+    const listener = vi.fn();
+    engine.subscribe(listener);
+    const loaded = engine.load([
+      { start: 0, end: 1, text: "Fast." },
+      { start: 2, end: 3, text: "Slow." },
+    ]);
+    await vi.waitFor(() =>
+      expect(listener).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ translation: "快。" }),
+        ]),
+      ),
+    );
+    finish("慢。");
+    await loaded;
+  });
+
+  it("starts pre-translation at the playback position", async () => {
+    const translateText = vi.fn(async (text: string) => `译:${text}`);
+    const engine = new SubtitleEngine(context(translateText));
+    await engine.load(
+      Array.from({ length: 80 }, (_, i) => ({
+        start: i * 2,
+        end: i * 2 + 2,
+        text: `Sentence ${i}.`,
+      })),
+      120,
+    );
+    expect(translateText.mock.calls[0][0]).toBe("Sentence 60.");
+  });
+
+  it("exposes failed cues so the renderer can explain missing translations", async () => {
+    const engine = new SubtitleEngine(
+      context(
+        vi.fn(async () => {
+          throw new Error("service unavailable");
+        }),
+      ),
+    );
+    await engine.load([{ start: 0, end: 1, text: "Hello." }]);
+    expect(engine.bilingualCues[0]).toMatchObject({ translationError: true });
+  });
   it("joins cues at sentence boundaries and enforces cue and character limits", () => {
     const sentences = batchCueSentences([
       { start: 0, end: 1, text: "Hello" },

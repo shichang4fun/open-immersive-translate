@@ -27,6 +27,7 @@ function isCapture(value: unknown): value is SubtitleCapture {
 export function installCaptureBridge(
   patterns: readonly SubtitleCapturePattern[],
   onCapture: (capture: SubtitleCapture) => void,
+  onReady?: () => void,
 ): () => void {
   if (!patterns.length) return () => undefined;
   const script = document.createElement("script");
@@ -44,6 +45,10 @@ export function installCaptureBridge(
 
   const onMessage = (event: MessageEvent<unknown>): void => {
     if (event.source !== window || !isRecord(event.data)) return;
+    if (event.data.source === MAIN_SOURCE && event.data.type === "ready") {
+      onReady?.();
+      return;
+    }
     if (
       event.data.source === MAIN_SOURCE &&
       event.data.type === "captured" &&

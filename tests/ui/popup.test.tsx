@@ -76,6 +76,34 @@ afterEach(() => {
 });
 
 describe("Popup", () => {
+  it("reads the translated state when reopened and exposes settings directly", async () => {
+    browserMock.tabs.sendMessage.mockResolvedValue({ translated: true });
+    render(<Popup />);
+    await screen.findByRole("button", { name: "显示原文" });
+    fireEvent.click(screen.getByRole("button", { name: "设置", exact: true }));
+    expect(browserMock.runtime.openOptionsPage).toHaveBeenCalledOnce();
+  });
+
+  it("offers YouTube subtitles independently of page translation", async () => {
+    browserMock.tabs.query.mockResolvedValue([
+      { id: 42, url: "https://www.youtube.com/watch?v=test" },
+    ]);
+    browserMock.tabs.sendMessage.mockImplementation(async (_id, message) =>
+      message.type === "getVideoSubtitleState"
+        ? { enabled: false }
+        : { enabled: true },
+    );
+    render(<Popup />);
+    const toggle = await screen.findByRole("checkbox", {
+      name: "视频双语字幕",
+    });
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(browserMock.tabs.sendMessage).toHaveBeenCalledWith(42, {
+        type: "toggleVideoSubtitles",
+      }),
+    );
+  });
   it("renders controls, sends the tab toggle, and persists selections", async () => {
     render(<Popup />);
 

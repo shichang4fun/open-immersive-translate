@@ -7,6 +7,8 @@ const zhCN = {
   turnOn: "开启双语字幕 · Open Immersive Translate",
   turnOff: "关闭双语字幕 · Open Immersive Translate",
   saveFailed: "字幕设置保存失败，请重试",
+  translating: "正在翻译…",
+  translationFailed: "字幕翻译失败，请检查翻译服务后重新开启",
 } as const;
 
 type SubtitleI18nKey = keyof typeof zhCN;
@@ -18,6 +20,9 @@ const en: Record<SubtitleI18nKey, string> = {
   turnOn: "Turn on bilingual subtitles · Open Immersive Translate",
   turnOff: "Turn off bilingual subtitles · Open Immersive Translate",
   saveFailed: "Could not save subtitle settings. Try again.",
+  translating: "Translating…",
+  translationFailed:
+    "Translation failed. Check your translation service and turn subtitles on again.",
 };
 
 export function subtitleLocale(language = navigator.language): SubtitleLocale {

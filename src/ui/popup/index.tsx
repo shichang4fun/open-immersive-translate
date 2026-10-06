@@ -1,5 +1,5 @@
 import { render } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import browser from "webextension-polyfill";
 
 import { LANGUAGE_CODES } from "../../shared/lang";
@@ -30,22 +30,55 @@ export function Popup(): preact.JSX.Element {
   const [moreOpen, setMoreOpen] = useState(false);
   const [menuStatus, setMenuStatus] = useState<string>();
   const [chatgptLoggedIn, setChatgptLoggedIn] = useState(false);
+  const [videoEnabled, setVideoEnabled] = useState<boolean>();
+  const [videoBusy, setVideoBusy] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    void getActiveTab().then(setActiveTab).catch(console.error);
+    void getActiveTab()
+      .then(async (tab) => {
+        setActiveTab(tab);
+        if (tab.id === undefined || !tab.hostname) return;
+        const state = (await browser.tabs
+          .sendMessage(tab.id, { type: "getPageState" })
+          .catch(() => undefined)) as { translated?: boolean } | undefined;
+        setTranslated(state?.translated === true);
+        if (/(^|\.)youtube\.com$|(^|\.)youtubekids\.com$/.test(tab.hostname)) {
+          const video = (await browser.tabs
+            .sendMessage(tab.id, { type: "getVideoSubtitleState" })
+            .catch(() => undefined)) as { enabled?: boolean } | undefined;
+          if (typeof video?.enabled === "boolean")
+            setVideoEnabled(video.enabled);
+        }
+      })
+      .catch(console.error);
     void sendToBackground({ type: "chatgptOauth.status" })
       .then((status) => setChatgptLoggedIn(status.state === "authenticated"))
       .catch(() => setChatgptLoggedIn(false));
   }, []);
 
-  const languageOptions = useMemo(
-    () =>
-      LANGUAGE_CODES.filter((code) => code !== "auto").map((code) => ({
-        value: code,
-        label: languageName(code),
-      })),
-    [],
-  );
+  useEffect(() => {
+    if (!moreOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !moreRef.current?.contains(event.target)
+      )
+        setMoreOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMoreOpen(false);
+        moreRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [moreOpen]);
 
   if (!config) {
     return (
@@ -58,6 +91,9 @@ export function Popup(): preact.JSX.Element {
   }
 
   setUiLocaleOverride(config.uiLanguage);
+  const languageOptions = LANGUAGE_CODES.filter((code) => code !== "auto").map(
+    (code) => ({ value: code, label: languageName(code) }),
+  );
 
   const hostname = activeTab.hostname;
   const always = hostname
@@ -67,7 +103,9 @@ export function Popup(): preact.JSX.Element {
     ? config.neverTranslateSites.includes(hostname)
     : false;
   const services = Object.keys(config.services)
-    .filter((id) => id !== "chatgpt" || chatgptLoggedIn)
+    .filter(
+      (id) => id !== "chatgpt" || chatgptLoggedIn || config.service === id,
+    )
     .map((id) => ({
       value: id,
       label: serviceName(id),
@@ -114,8 +152,35 @@ export function Popup(): preact.JSX.Element {
   return (
     <main class="popup-shell">
       <header class="popup-header">
-        <h1>{t("app.name")}</h1>
-        {hostname && <span>{hostname}</span>}
+        <span class="popup-brand" aria-hidden="true">
+          译
+        </span>
+        <div class="popup-heading">
+          <h1>{t("app.name")}</h1>
+          {hostname && <p title={hostname}>{hostname}</p>}
+        </div>
+        <button
+          class="popup-settings"
+          type="button"
+          aria-label={t("popup.settings")}
+          title={t("popup.settings")}
+          onClick={() => void browser.runtime.openOptionsPage()}
+        >
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M4 7h16M4 17h16" />
+            <circle cx="9" cy="7" r="3" fill="var(--ui-panel)" />
+            <circle cx="15" cy="17" r="3" fill="var(--ui-panel)" />
+          </svg>
+        </button>
       </header>
 
       <Button
@@ -129,6 +194,36 @@ export function Popup(): preact.JSX.Element {
         <p role="alert" class="ui-status ui-status-error">
           {t("popup.toggleFailed")}
         </p>
+      )}
+
+      {videoEnabled !== undefined && (
+        <section class="popup-video">
+          <Toggle
+            checked={videoEnabled}
+            disabled={videoBusy}
+            label={t("popup.videoSubtitles")}
+            onChange={(checked) => {
+              if (activeTab.id === undefined || videoBusy) return;
+              setVideoBusy(true);
+              setVideoEnabled(checked);
+              void browser.tabs
+                .sendMessage(activeTab.id, { type: "toggleVideoSubtitles" })
+                .then((response) => {
+                  const state = response as { enabled?: boolean } | undefined;
+                  if (typeof state?.enabled !== "boolean")
+                    throw new Error("Subtitle control unavailable");
+                  setVideoEnabled(state.enabled);
+                  setToggleError(false);
+                })
+                .catch(() => {
+                  setVideoEnabled(videoEnabled);
+                  setToggleError(true);
+                })
+                .finally(() => setVideoBusy(false));
+            }}
+          />
+          <p>{t("popup.videoHint")}</p>
+        </section>
       )}
 
       <div class="popup-fields">
@@ -203,7 +298,7 @@ export function Popup(): preact.JSX.Element {
       )}
 
       <footer class="popup-footer">
-        <div class="popup-more">
+        <div class="popup-more" ref={moreRef}>
           <button
             type="button"
             aria-haspopup="menu"

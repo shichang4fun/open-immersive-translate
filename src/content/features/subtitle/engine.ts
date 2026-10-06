@@ -140,7 +140,7 @@ export class SubtitleEngine {
     return () => this.listeners.delete(listener);
   }
 
-  async load(input: readonly SubtitleCue[]): Promise<void> {
+  async load(input: readonly SubtitleCue[], currentTime = 0): Promise<void> {
     if (this.disposed) return;
     const generation = ++this.generation;
     this.cues = batchCueSentences(input).map((cue, index) => ({
@@ -150,7 +150,13 @@ export class SubtitleEngine {
     this.emit();
     if (this.preTranslation) {
       await this.translateIndices(
-        this.cues.map((_, index) => index),
+        this.cues
+          .map((_, index) => index)
+          .sort(
+            (a, b) =>
+              Number(this.cues[a].end <= currentTime) -
+                Number(this.cues[b].end <= currentTime) || a - b,
+          ),
         generation,
       );
     }
@@ -223,14 +229,18 @@ export class SubtitleEngine {
             const translation = await this.translate(cue.text);
             if (generation === this.generation && this.cues[index] === cue) {
               cue.translation = translation;
+              cue.translationError = false;
+              this.emit();
             }
           } catch {
-            // A failed cue remains untranslated and can be retried on the next window update.
+            if (generation === this.generation && this.cues[index] === cue) {
+              cue.translationError = true;
+              this.emit();
+            }
           }
         }),
       );
       if (generation !== this.generation) return;
-      this.emit();
     }
   }
 

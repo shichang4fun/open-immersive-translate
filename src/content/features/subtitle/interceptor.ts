@@ -95,6 +95,7 @@ export function installMainWorldInterceptor(
           typeof value.format === "string",
       ),
     );
+    pageWindow.postMessage({ source: MAIN_SOURCE, type: "ready" }, "*");
   };
   pageWindow.addEventListener("message", onMessage);
 

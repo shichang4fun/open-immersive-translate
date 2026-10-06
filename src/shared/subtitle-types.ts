@@ -10,6 +10,7 @@ export interface SubtitleCue {
 /** A cue after translation. Translation is absent while work is pending. */
 export interface BilingualSubtitleCue extends SubtitleCue {
   translation?: string;
+  translationError?: boolean;
 }
 
 export type SubtitleDisplayMode = "dual" | "translation-only" | "source-only";

@@ -2,6 +2,7 @@ import type {
   BilingualSubtitleCue,
   SubtitleConfig,
 } from "../../../shared/subtitle-types";
+import { subtitleText } from "./i18n";
 
 interface NativeTrackState {
   track: TextTrack;
@@ -139,10 +140,11 @@ export class SubtitleRenderer {
     if (!cue) return;
 
     this.sourceLine.textContent = cue.text;
-    this.translationLine.textContent = cue.translation ?? "";
+    this.translationLine.textContent =
+      cue.translation ??
+      subtitleText(cue.translationError ? "translationFailed" : "translating");
     this.sourceLine.hidden = this.style.mode === "translation-only";
-    this.translationLine.hidden =
-      this.style.mode === "source-only" || cue.translation === undefined;
+    this.translationLine.hidden = this.style.mode === "source-only";
   }
 
   dispose(): void {
