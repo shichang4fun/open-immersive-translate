@@ -1,4 +1,4 @@
-import { render } from "preact";
+import { Fragment, render } from "preact";
 import {
   downloadTranslationHistory,
   type TranslationHistoryFormat,
@@ -108,6 +108,9 @@ function SettingsIcon({ tab }: { tab: TabId }): preact.JSX.Element {
 
 export function Options(): preact.JSX.Element {
   const [activeTab, setActiveTab] = useState<TabId>(tabFromHash);
+  const [compactNavigation, setCompactNavigation] = useState(
+    () => window.matchMedia?.("(max-width: 760px)").matches ?? false,
+  );
   const { config, error, updateConfig } = useKConfig();
   const [pendingSaves, setPendingSaves] = useState(0);
   const saveChanges: KConfigUpdater = (patch) => {
@@ -123,6 +126,14 @@ export function Options(): preact.JSX.Element {
     setActiveTab(tab);
     if (window.location.hash !== `#${tab}`) window.location.hash = tab;
   };
+
+  useEffect(() => {
+    const query = window.matchMedia?.("(max-width: 760px)");
+    if (!query) return;
+    const updateNavigation = (): void => setCompactNavigation(query.matches);
+    query.addEventListener("change", updateNavigation);
+    return () => query.removeEventListener("change", updateNavigation);
+  }, []);
 
   useEffect(() => {
     const updateFromHash = (): void => setActiveTab(tabFromHash());
@@ -154,44 +165,54 @@ export function Options(): preact.JSX.Element {
             <span>Open Immersive Translate</span>
           </div>
         </div>
-        <p class="options-nav-label">{t("options.title")}</p>
         <nav
           role="tablist"
           aria-label={t("options.title")}
-          aria-orientation="vertical"
+          aria-orientation={compactNavigation ? "horizontal" : "vertical"}
         >
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              id={`tab-${tab.id}`}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              aria-controls={`panel-${tab.id}`}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              onClick={() => selectTab(tab.id)}
-              onKeyDown={(event) => {
-                const index = tabs.findIndex((item) => item.id === tab.id);
-                const nextIndex =
-                  event.key === "Home"
-                    ? 0
-                    : event.key === "End"
-                      ? tabs.length - 1
-                      : ["ArrowDown", "ArrowRight"].includes(event.key)
-                        ? (index + 1) % tabs.length
-                        : ["ArrowUp", "ArrowLeft"].includes(event.key)
-                          ? (index + tabs.length - 1) % tabs.length
-                          : undefined;
-                if (nextIndex === undefined) return;
-                event.preventDefault();
-                const next = tabs[nextIndex]!;
-                selectTab(next.id);
-                document.getElementById(`tab-${next.id}`)?.focus();
-              }}
-            >
-              <SettingsIcon tab={tab.id} />
-              <span>{t(tab.label)}</span>
-            </button>
+          {tabs.map((tab, tabIndex) => (
+            <Fragment key={tab.id}>
+              {(tabIndex === 0 || tabIndex === 3) && (
+                <p class="options-nav-label" aria-hidden="true">
+                  {t(
+                    tabIndex === 0
+                      ? "options.preferences"
+                      : "options.management",
+                  )}
+                </p>
+              )}
+              <button
+                key={tab.id}
+                id={`tab-${tab.id}`}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                aria-controls={`panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                onClick={() => selectTab(tab.id)}
+                onKeyDown={(event) => {
+                  const index = tabs.findIndex((item) => item.id === tab.id);
+                  const nextIndex =
+                    event.key === "Home"
+                      ? 0
+                      : event.key === "End"
+                        ? tabs.length - 1
+                        : ["ArrowDown", "ArrowRight"].includes(event.key)
+                          ? (index + 1) % tabs.length
+                          : ["ArrowUp", "ArrowLeft"].includes(event.key)
+                            ? (index + tabs.length - 1) % tabs.length
+                            : undefined;
+                  if (nextIndex === undefined) return;
+                  event.preventDefault();
+                  const next = tabs[nextIndex]!;
+                  selectTab(next.id);
+                  document.getElementById(`tab-${next.id}`)?.focus();
+                }}
+              >
+                <SettingsIcon tab={tab.id} />
+                <span>{t(tab.label)}</span>
+              </button>
+            </Fragment>
           ))}
         </nav>
         <p class="options-sidebar-note">{t("options.localSettings")}</p>
@@ -285,7 +306,7 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
   return (
     <div class="options-stack">
       <Card title={t("basic.language")}>
-        <div class="form-grid two-columns">
+        <div class="settings-rows">
           <Field label={t("basic.uiLanguage")} htmlFor="ui-language">
             <Select
               id="ui-language"
@@ -325,61 +346,66 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
             />
           </Field>
         </div>
-        <div
-          class="segmented options-segmented"
-          role="group"
-          aria-label={t("popup.mode")}
-        >
-          {(["dual", "translation"] as const).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={config.translationMode === mode}
-              onClick={() =>
-                save(onPatch, {
-                  translationMode: mode as TranslationMode,
-                })
-              }
-            >
-              {t(mode === "dual" ? "mode.dual" : "mode.translation")}
-            </button>
-          ))}
+        <div class="settings-row">
+          <span id="translation-mode-label">{t("popup.mode")}</span>
+          <div
+            class="segmented options-segmented"
+            role="group"
+            aria-labelledby="translation-mode-label"
+          >
+            {(["dual", "translation"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={config.translationMode === mode}
+                onClick={() =>
+                  save(onPatch, {
+                    translationMode: mode as TranslationMode,
+                  })
+                }
+              >
+                {t(mode === "dual" ? "mode.dual" : "mode.translation")}
+              </button>
+            ))}
+          </div>
         </div>
       </Card>
 
       <Card title={t("basic.theme")}>
-        <div class="theme-picker">
-          {themeOptions.map(([theme, label]) => (
-            <button
-              key={theme}
-              type="button"
-              class="theme-choice"
-              aria-pressed={config.theme === theme}
-              onClick={() => save(onPatch, { theme })}
+        <div class="options-appearance">
+          <div class="theme-picker">
+            {themeOptions.map(([theme, label]) => (
+              <button
+                key={theme}
+                type="button"
+                class="theme-choice"
+                aria-pressed={config.theme === theme}
+                onClick={() => save(onPatch, { theme })}
+              >
+                <span class={`theme-swatch theme-${theme}`} aria-hidden="true">
+                  Aa
+                </span>
+                <span>{t(label)}</span>
+              </button>
+            ))}
+          </div>
+          <div class="options-preview">
+            <span class="options-preview-label">{t("options.preview")}</span>
+            <p class="options-preview-source" lang="en">
+              Read the world in your own language.
+            </p>
+            <p
+              class={`theme-preview theme-${config.theme}`}
+              style={{
+                fontFamily: config.font || "inherit",
+                fontSize: fontSize || "inherit",
+              }}
             >
-              <span class={`theme-swatch theme-${theme}`} aria-hidden="true">
-                Aa
-              </span>
-              <span>{t(label)}</span>
-            </button>
-          ))}
+              {t("basic.themePreview")}
+            </p>
+          </div>
         </div>
-        <div class="options-preview">
-          <span class="options-preview-label">{t("options.preview")}</span>
-          <p class="options-preview-source" lang="en">
-            Read the world in your own language.
-          </p>
-          <p
-            class={`theme-preview theme-${config.theme}`}
-            style={{
-              fontFamily: config.font || "inherit",
-              fontSize: fontSize || "inherit",
-            }}
-          >
-            {t("basic.themePreview")}
-          </p>
-        </div>
-        <div class="form-grid two-columns options-typography">
+        <div class="settings-rows options-typography">
           <Field label={t("basic.font")} htmlFor="translation-font">
             <Select
               id="translation-font"
@@ -417,7 +443,7 @@ function BasicPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
       </Card>
 
       <Card title={t("basic.floatBall")}>
-        <div class="form-stack">
+        <div class="settings-rows">
           <Toggle
             checked={config.floatBall.enabled}
             label={t("common.enabled")}

@@ -77,17 +77,17 @@ describe("Options", () => {
     });
     expect(window.location.hash).toBe("#features");
     expect(document.activeElement).toBe(
-      screen.getByRole("tab", { name: "输入框 / 划词 / 悬停" }),
+      screen.getByRole("tab", { name: "翻译功能" }),
     );
     cleanup();
     render(<Options />);
     await screen.findByRole("heading", {
-      name: "输入框 / 划词 / 悬停",
+      name: "翻译功能",
       level: 2,
     });
     expect(
       screen
-        .getByRole("tab", { name: "输入框 / 划词 / 悬停" })
+        .getByRole("tab", { name: "翻译功能" })
         .getAttribute("aria-selected"),
     ).toBe("true");
   });
@@ -263,7 +263,7 @@ describe("Options", () => {
     render(<Options />);
 
     await screen.findByRole("heading", {
-      name: "缓存 / 导入导出",
+      name: "数据与备份",
       level: 2,
     });
     expect(screen.getByRole("heading", { name: "翻译缓存" })).toBeTruthy();
@@ -295,7 +295,7 @@ describe("Options", () => {
     render(<Options />);
 
     await screen.findByRole("heading", { name: "基本", level: 2 });
-    fireEvent.click(screen.getByRole("tab", { name: "缓存 / 导入导出" }));
+    fireEvent.click(screen.getByRole("tab", { name: "数据与备份" }));
     const file = new File(["not json"], "bad.json", {
       type: "application/json",
     });
@@ -318,7 +318,7 @@ describe("Options", () => {
     render(<Options />);
     await screen.findByRole("heading", { name: "基本", level: 2 });
 
-    fireEvent.click(screen.getByRole("tab", { name: "输入框 / 划词 / 悬停" }));
+    fireEvent.click(screen.getByRole("tab", { name: "翻译功能" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "中英自动目标语言" }));
     fireEvent.change(screen.getByLabelText("划词触发方式"), {
       target: { value: "direct" },
@@ -351,7 +351,7 @@ describe("Options", () => {
     render(<Options />);
     await screen.findByRole("heading", { name: "基本", level: 2 });
 
-    fireEvent.click(screen.getByRole("tab", { name: "输入框 / 划词 / 悬停" }));
+    fireEvent.click(screen.getByRole("tab", { name: "翻译功能" }));
     fireEvent.change(screen.getByLabelText("输入框目标语言"), {
       target: { value: "ja" },
     });
@@ -398,7 +398,7 @@ describe("Options", () => {
       ]),
     );
 
-    fireEvent.click(screen.getByRole("tab", { name: "缓存 / 导入导出" }));
+    fireEvent.click(screen.getByRole("tab", { name: "数据与备份" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "启用译文缓存" }));
     fireEvent.input(screen.getByLabelText("缓存保留天数"), {
       target: { value: "14" },

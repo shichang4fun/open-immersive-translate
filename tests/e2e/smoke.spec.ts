@@ -355,6 +355,9 @@ test("persists ChatGPT Fast mode and can restore standard speed", async ({
     await selectMockService(worker, { uiLanguage: "zh-CN" });
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/options.html`);
+    await expect(page.locator("body")).toHaveCSS("font-size", "16px");
+    await expect(page.locator(".options-content-header p").first()).toHaveCSS("font-size", "16px");
+    await expect(page.locator(".ui-toggle").first()).toHaveCSS("font-size", "16px");
     await page.getByRole("tab", { name: "翻译服务", exact: true }).click();
     await page.getByLabel("选择服务", { exact: true }).selectOption("chatgpt");
     const speed = page.getByLabel("请求速度", { exact: true });
@@ -447,16 +450,18 @@ test("settings stay readable across tabs, narrow windows and dark mode", async (
     await page.goBack();
     await expect(page).toHaveURL(/#services$/);
     await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByRole("tablist")).toHaveAttribute("aria-orientation", "horizontal");
     for (const name of [
       "基本",
       "翻译服务",
-      "输入框 / 划词 / 悬停",
+      "翻译功能",
       "站点规则",
       "术语表",
       "快捷键",
-      "缓存 / 导入导出",
+      "数据与备份",
     ]) {
       await page.getByRole("tab", { name, exact: true }).click();
+      await expect(page.getByRole("tab", { name, exact: true })).toBeInViewport();
       await expect(page.getByRole("tabpanel")).toBeVisible();
       expect(
         await page.evaluate(
@@ -473,7 +478,7 @@ test("settings stay readable across tabs, narrow windows and dark mode", async (
     await page.setViewportSize({ width: 1440, height: 1080 });
     await expect(page.locator("body")).toHaveCSS(
       "background-color",
-      "rgb(23, 30, 27)",
+      "rgb(25, 24, 29)",
     );
     await page.screenshot({
       path: testInfo.outputPath("settings-dark.png"),
