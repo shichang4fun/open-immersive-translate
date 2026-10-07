@@ -7,6 +7,27 @@ afterEach(() => {
 });
 
 describe("subtitle switch placement", () => {
+  it("anchors above X playback controls and uses the actual switch width", () => {
+    document.body.innerHTML =
+      '<div data-testid="videoPlayer"><video></video></div>';
+    const video = document.querySelector("video")!;
+    vi.spyOn(video, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(100, 200, 520, 292),
+    );
+    Object.defineProperty(document, "elementsFromPoint", {
+      configurable: true,
+      value: vi.fn(() => [video]),
+    });
+    const toggle = new SubtitleToggle(video, () => undefined);
+    try {
+      expect(toggle.host.style.top).toBe("208px");
+      expect(toggle.host.style.left).toBe("612px");
+      expect(toggle.host.style.transform).toBe("translateX(-100%)");
+    } finally {
+      toggle.dispose();
+    }
+  });
+
   it("hides behind an X-style image modal and returns when the modal closes", () => {
     document.body.innerHTML =
       '<div data-testid="videoPlayer"><video></video></div><div role="dialog"><img></div>';

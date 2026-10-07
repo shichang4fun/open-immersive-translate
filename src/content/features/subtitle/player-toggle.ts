@@ -72,12 +72,15 @@ export class SubtitleToggle {
         : document.documentElement;
     if (this.host.parentElement !== container) container.append(this.host);
     const rect = this.media.getBoundingClientRect();
-    this.host.style.cssText = `position:fixed;z-index:2147483647;left:${Math.max(8, rect.right - 130)}px;top:${Math.max(8, rect.bottom - 52)}px;`;
+    // Keep clear of native playback controls. Anchor the actual pill width
+    // instead of assuming 130px (labels, zoom and locales change its width).
+    this.host.style.cssText = `position:fixed;z-index:2147483647;left:${Math.min(window.innerWidth, rect.right) - 8}px;top:${rect.top + 8}px;transform:translateX(-100%);`;
     this.host.hidden =
       rect.width < 160 ||
       rect.height < 90 ||
       rect.bottom <= 0 ||
       rect.top >= window.innerHeight ||
+      rect.top + 8 < 0 ||
       rect.right <= 0 ||
       rect.left >= window.innerWidth ||
       getComputedStyle(this.media).visibility === "hidden";

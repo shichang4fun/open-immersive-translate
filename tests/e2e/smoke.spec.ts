@@ -183,21 +183,30 @@ test("YouTube loads captions with CC off and offers a compact independent popup 
   }
 });
 
-test("other sites require opt-in and video controls stay behind image modals", async ({ playwright }) => {
+test("other sites require opt-in and video controls stay behind image modals", async ({ playwright }, testInfo) => {
   const { context, worker } = await launchExtension(playwright);
   try {
     await selectMockService(worker, { subtitle: { enabled: true, enabledSites: [] } });
     const page = await context.newPage();
     await page.route("**/video-scope.html", (route) => route.fulfill({
       contentType: "text/html",
-      body: `<!doctype html><style>video{width:600px;height:350px;background:#222}#photo{position:fixed;inset:0;z-index:100;background:white}#photo[hidden]{display:none}</style><div data-testid="videoPlayer"><video></video></div><div id="photo" role="dialog" hidden>Image viewer</div>`,
+      body: `<!doctype html><style>body{font:18px system-ui;padding:24px}video{width:600px;height:350px;background:#222}#photo{position:fixed;inset:0;z-index:100;background:white}#photo[hidden]{display:none}</style><h1>Dynamic video captions · regression fixture</h1><div data-testid="videoPlayer"><video></video></div><div id="photo" role="dialog" hidden>Image viewer</div><script>const video=document.querySelector('video');const track=video.addTextTrack('subtitles','English','en');track.mode='showing';track.addCue(new VTTCue(0,30,'Hello from dynamic X captions.'));const clone=video.addTextTrack('captions','clone','en');clone.mode='showing';clone.addCue(new VTTCue(0,30,'Hello from dynamic X captions.'));</script>`,
     }));
     await page.goto(`${origin}/video-scope.html`);
     await expect.poll(() => sendToArticleTab(worker, { type: "getVideoSubtitleState" })).toBe(true);
     const toggle = page.locator('[data-imt="subtitle-toggle"]');
     await expect(toggle).toHaveCount(0);
+    await expect(page.locator("video track")).toHaveCount(0);
     expect(await sendToArticleTab(worker, { type: "toggleVideoSubtitles" })).toBe(true);
     await expect(toggle).toBeVisible();
+    await expect(page.locator('[data-imt="subtitle-overlay"] .translation')).toContainText("[zh] Hello from dynamic X captions.");
+    const videoBounds = await page.locator("video").boundingBox();
+    const toggleBounds = await toggle.boundingBox();
+    expect(toggleBounds!.x).toBeGreaterThanOrEqual(videoBounds!.x);
+    expect(toggleBounds!.x + toggleBounds!.width).toBeLessThanOrEqual(videoBounds!.x + videoBounds!.width);
+    expect(toggleBounds!.y).toBe(videoBounds!.y + 8);
+    expect(toggleBounds!.y + toggleBounds!.height).toBeLessThan(videoBounds!.y + videoBounds!.height - 52);
+    await page.screenshot({ path: testInfo.outputPath("video-toggle-top-right.png") });
     await page.reload();
     await expect(toggle).toBeVisible();
     await page.locator("#photo").evaluate((element) => { (element as HTMLElement).hidden = false; });
@@ -206,6 +215,8 @@ test("other sites require opt-in and video controls stay behind image modals", a
     await expect(toggle).toBeVisible();
     expect(await sendToArticleTab(worker, { type: "toggleVideoSubtitles" })).toBe(true);
     await expect(toggle).toHaveCount(0);
+    await expect(page.locator('[data-imt="subtitle-overlay"]')).toHaveCount(0);
+    await expect.poll(() => page.locator("video").evaluate(v => [...(v as HTMLVideoElement).textTracks].map(t => t.mode))).toEqual(["showing", "showing"]);
     await page.reload();
     await expect.poll(() => sendToArticleTab(worker, { type: "getVideoSubtitleState" })).toBe(true);
     await expect(toggle).toHaveCount(0);

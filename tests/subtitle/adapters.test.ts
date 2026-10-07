@@ -108,6 +108,57 @@ describe("subtitle adapters", () => {
     expect(cues).toEqual([{ id: "a", start: 1, end: 2, text: "Hello" }]);
   });
 
+  it("reads player-created subtitle tracks without HTML track tags, but ignores metadata", async () => {
+    document.body.innerHTML = "<video></video>";
+    const video = document.querySelector("video")!;
+    const captions = {
+      kind: "subtitles",
+      mode: "hidden",
+      cues: {
+        0: { id: "a", startTime: 0, endTime: 3, text: "Dynamic caption" },
+        length: 1,
+      },
+    };
+    const metadata = {
+      kind: "metadata",
+      mode: "hidden",
+      cues: {
+        0: { id: "b", startTime: 0, endTime: 3, text: "Tracking metadata" },
+        length: 1,
+      },
+    };
+    Object.defineProperty(video, "textTracks", {
+      value: { 0: metadata, 1: captions, length: 2 },
+    });
+    const listener = vi.fn();
+    const dispose = matchingSubtitleAdapters("https://x.com/example/status/1")
+      .find((a) => a.id === "generic-track")!
+      .hook({ document, captures: new SubtitleCaptureHub() })
+      .subscribe(listener);
+    try {
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          media: video,
+          cues: [{ id: "a", start: 0, end: 3, text: "Dynamic caption" }],
+        }),
+      );
+      expect(listener).toHaveBeenCalledTimes(1);
+      captions.cues[0].text = "Next caption";
+      await vi.waitFor(
+        () =>
+          expect(listener).toHaveBeenCalledWith(
+            expect.objectContaining({
+              cues: [expect.objectContaining({ text: "Next caption" })],
+            }),
+          ),
+        { timeout: 1500 },
+      );
+    } finally {
+      dispose();
+    }
+    expect(captions.mode).toBe("hidden");
+  });
+
   it.each([
     ["netflix", "https://www.netflix.com/watch/1", "ttml", ttmlFixture],
     ["primevideo", "https://www.primevideo.com/detail/1", "ttml", ttmlFixture],

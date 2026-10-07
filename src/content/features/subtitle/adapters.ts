@@ -122,48 +122,54 @@ function trackSource(document: Document): SubtitleCueSource {
   return {
     subscribe(listener) {
       const modes = new Map<TextTrack, TextTrackMode>();
-      const hashes = new WeakMap<HTMLTrackElement, string>();
+      const hashes = new WeakMap<HTMLMediaElement, string>();
       const listened = new Set<HTMLTrackElement>();
 
       const scan = (): void => {
-        for (const element of document.querySelectorAll(
-          "video track, audio track",
+        for (const media of document.querySelectorAll<HTMLMediaElement>(
+          "video, audio",
         )) {
-          const trackElement = element as HTMLTrackElement;
-          const kind = trackElement.kind.toLowerCase();
-          if (kind !== "subtitles" && kind !== "captions") continue;
-          let track: TextTrack;
-          try {
-            track = trackElement.track;
-          } catch {
-            continue;
+          // X and other streaming players create TextTracks in JavaScript,
+          // without any <track> elements. Keep the media association explicit.
+          const tracks = new Map<TextTrack, string>();
+          for (let i = 0; i < media.textTracks.length; i += 1) {
+            const track = media.textTracks[i];
+            tracks.set(track, track.kind);
           }
-          if (!modes.has(track)) modes.set(track, track.mode);
-          try {
-            // Load disabled tracks without suppressing the player's own captions.
-            // The renderer owns hiding/restoring a showing track while enabled.
-            if (track.mode === "disabled") track.mode = "hidden";
-          } catch {
-            // A managed player may expose a read-only mode.
+          for (const element of media.querySelectorAll("track")) {
+            try {
+              tracks.set(element.track, element.kind);
+            } catch {
+              continue;
+            }
+            if (!listened.has(element)) {
+              listened.add(element);
+              element.addEventListener("load", scan);
+            }
           }
-          if (!listened.has(trackElement)) {
-            listened.add(trackElement);
-            trackElement.addEventListener("load", scan);
+          for (const [track, kind] of tracks) {
+            if (kind !== "subtitles" && kind !== "captions") continue;
+            if (!modes.has(track)) modes.set(track, track.mode);
+            try {
+              // Load captions without displaying them; the renderer owns
+              // hiding/restoring native captions while translation is active.
+              if (track.mode === "disabled") track.mode = "hidden";
+            } catch {
+              // A managed player may expose a read-only mode.
+            }
+            const cues = textTrackCues(track);
+            if (!cues.length) continue;
+            const hash = cues
+              .map((cue) => `${cue.start}|${cue.end}|${cue.text}`)
+              .join("\u0000");
+            if (hashes.get(media) !== hash) {
+              hashes.set(media, hash);
+              listener({ adapterId: "generic-track", cues, media });
+            }
+            // One usable language/track per player; don't alternate with
+            // the duplicate "clone" track created by X's caption renderer.
+            break;
           }
-          const cues = textTrackCues(track);
-          const hash = cues
-            .map((cue) => `${cue.start}|${cue.end}|${cue.text}`)
-            .join("\u0000");
-          if (!cues.length || hashes.get(trackElement) === hash) continue;
-          hashes.set(trackElement, hash);
-          listener({
-            adapterId: "generic-track",
-            cues,
-            media:
-              (trackElement.closest(
-                "video, audio",
-              ) as HTMLMediaElement | null) ?? undefined,
-          });
         }
       };
 
