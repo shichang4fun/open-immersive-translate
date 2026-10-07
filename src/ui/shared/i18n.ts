@@ -26,6 +26,8 @@ const zhCN = {
   "popup.currentSite": "当前站点",
   "popup.videoSubtitles": "视频双语字幕",
   "popup.videoHint": "独立控制视频字幕，自动开启 YouTube CC。",
+  "popup.videoSiteHint":
+    "仅为当前网站开启。需要视频提供字幕，不支持语音转字幕。",
   "popup.alwaysTranslate": "总是翻译",
   "popup.neverTranslate": "从不翻译",
   "popup.noSite": "当前页面不能设置站点规则",
@@ -309,6 +311,8 @@ const en: Record<I18nKey, string> = {
   "popup.currentSite": "Current site",
   "popup.videoSubtitles": "Bilingual video subtitles",
   "popup.videoHint": "Independent of page translation. Turns on YouTube CC.",
+  "popup.videoSiteHint":
+    "Enable for this site only. Requires existing captions; no speech transcription.",
   "popup.alwaysTranslate": "Always translate",
   "popup.neverTranslate": "Never translate",
   "popup.noSite": "Site rules are unavailable for this page",
@@ -599,6 +603,8 @@ const zhTW: Partial<Record<I18nKey, string>> = {
   "popup.currentSite": "目前網站",
   "popup.videoSubtitles": "影片雙語字幕",
   "popup.videoHint": "獨立控制影片字幕，自動開啟 YouTube CC。",
+  "popup.videoSiteHint":
+    "僅為目前網站開啟。需要影片提供字幕，不支援語音轉字幕。",
   "popup.alwaysTranslate": "總是翻譯",
   "popup.neverTranslate": "永不翻譯",
   "popup.noSite": "目前頁面無法設定網站規則",
@@ -861,6 +867,8 @@ const ja: Partial<Record<I18nKey, string>> = {
   "popup.currentSite": "現在のサイト",
   "popup.videoSubtitles": "動画の二言語字幕",
   "popup.videoHint": "ページ翻訳とは別に YouTube CC を有効にします。",
+  "popup.videoSiteHint":
+    "このサイトのみ有効にします。既存の字幕が必要です。音声の文字起こしには対応していません。",
   "popup.alwaysTranslate": "常に翻訳",
   "popup.neverTranslate": "翻訳しない",
   "popup.noSite": "このページではサイトルールを設定できません",

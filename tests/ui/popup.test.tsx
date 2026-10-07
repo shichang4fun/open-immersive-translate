@@ -84,26 +84,29 @@ describe("Popup", () => {
     expect(browserMock.runtime.openOptionsPage).toHaveBeenCalledOnce();
   });
 
-  it("offers YouTube subtitles independently of page translation", async () => {
-    browserMock.tabs.query.mockResolvedValue([
-      { id: 42, url: "https://www.youtube.com/watch?v=test" },
-    ]);
-    browserMock.tabs.sendMessage.mockImplementation(async (_id, message) =>
-      message.type === "getVideoSubtitleState"
-        ? { enabled: false }
-        : { enabled: true },
-    );
-    render(<Popup />);
-    const toggle = await screen.findByRole("checkbox", {
-      name: "视频双语字幕",
-    });
-    fireEvent.click(toggle);
-    await waitFor(() =>
-      expect(browserMock.tabs.sendMessage).toHaveBeenCalledWith(42, {
-        type: "toggleVideoSubtitles",
-      }),
-    );
-  });
+  it.each(["www.youtube.com", "x.com"])(
+    "offers explicit subtitles independently of page translation on %s",
+    async (hostname) => {
+      browserMock.tabs.query.mockResolvedValue([
+        { id: 42, url: `https://${hostname}/watch?v=test` },
+      ]);
+      browserMock.tabs.sendMessage.mockImplementation(async (_id, message) =>
+        message.type === "getVideoSubtitleState"
+          ? { enabled: false }
+          : { enabled: true },
+      );
+      render(<Popup />);
+      const toggle = await screen.findByRole("checkbox", {
+        name: "视频双语字幕",
+      });
+      fireEvent.click(toggle);
+      await waitFor(() =>
+        expect(browserMock.tabs.sendMessage).toHaveBeenCalledWith(42, {
+          type: "toggleVideoSubtitles",
+        }),
+      );
+    },
+  );
   it("renders controls, sends the tab toggle, and persists selections", async () => {
     render(<Popup />);
 

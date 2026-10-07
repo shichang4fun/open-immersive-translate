@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const messageListeners = new Set<(message: unknown) => unknown>();
 const browserMock = vi.hoisted(() => ({
@@ -23,7 +23,12 @@ import {
   TOGGLE_SUBTITLE_PRETRANSLATION_MESSAGE,
 } from "../../src/content/features/subtitle";
 
+beforeEach(() => {
+  vi.stubGlobal("location", new URL("https://www.youtube.com/watch?v=test"));
+});
+
 afterEach(() => {
+  vi.unstubAllGlobals();
   messageListeners.clear();
   browserMock.runtime.sendMessage.mockClear();
   document.body.replaceChildren();
@@ -64,6 +69,58 @@ const button = () =>
     .shadowRoot!.querySelector("button")!;
 
 describe("subtitle feature initialization", () => {
+  it("does not create controls or translate captions outside YouTube by default", () => {
+    vi.stubGlobal("location", new URL("https://x.com/example/status/1"));
+    const { ctx, native } = player();
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
+      expect(ctx.translateText).not.toHaveBeenCalled();
+      expect(native.mode).toBe("showing");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("persists an explicit site opt-in without disabling YouTube when turned off", async () => {
+    vi.stubGlobal("location", new URL("https://x.com/example/status/2"));
+    const { ctx } = player();
+    const dispose = initSubtitles(ctx);
+    const send = async (type: string) => {
+      for (const listener of messageListeners) {
+        const result = listener({ type });
+        if (result) return await result;
+      }
+    };
+    try {
+      expect(await send("getVideoSubtitleState")).toEqual({ enabled: false });
+      expect(await send("toggleVideoSubtitles")).toEqual({ enabled: true });
+      expect(browserMock.runtime.sendMessage).toHaveBeenLastCalledWith({
+        type: "setConfig",
+        patch: {
+          subtitle: expect.objectContaining({ enabledSites: ["x.com"] }),
+        },
+      });
+      expect(
+        document.querySelector('[data-imt="subtitle-toggle"]'),
+      ).not.toBeNull();
+      expect(await send("toggleVideoSubtitles")).toEqual({ enabled: false });
+      expect(browserMock.runtime.sendMessage).toHaveBeenLastCalledWith({
+        type: "setConfig",
+        patch: {
+          subtitle: expect.objectContaining({
+            enabled: true,
+            youtube: true,
+            enabledSites: [],
+          }),
+        },
+      });
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
   it("offers an off switch without translating or hiding native captions, then restores cached tracks", async () => {
     const { native, ctx } = player(false);
     const dispose = initSubtitles(ctx);

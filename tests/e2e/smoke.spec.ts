@@ -183,13 +183,44 @@ test("YouTube loads captions with CC off and offers a compact independent popup 
   }
 });
 
+test("other sites require opt-in and video controls stay behind image modals", async ({ playwright }) => {
+  const { context, worker } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, { subtitle: { enabled: true, enabledSites: [] } });
+    const page = await context.newPage();
+    await page.route("**/video-scope.html", (route) => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><style>video{width:600px;height:350px;background:#222}#photo{position:fixed;inset:0;z-index:100;background:white}#photo[hidden]{display:none}</style><div data-testid="videoPlayer"><video></video></div><div id="photo" role="dialog" hidden>Image viewer</div>`,
+    }));
+    await page.goto(`${origin}/video-scope.html`);
+    await expect.poll(() => sendToArticleTab(worker, { type: "getVideoSubtitleState" })).toBe(true);
+    const toggle = page.locator('[data-imt="subtitle-toggle"]');
+    await expect(toggle).toHaveCount(0);
+    expect(await sendToArticleTab(worker, { type: "toggleVideoSubtitles" })).toBe(true);
+    await expect(toggle).toBeVisible();
+    await page.reload();
+    await expect(toggle).toBeVisible();
+    await page.locator("#photo").evaluate((element) => { (element as HTMLElement).hidden = false; });
+    await expect(toggle).toBeHidden();
+    await page.locator("#photo").evaluate((element) => { (element as HTMLElement).hidden = true; });
+    await expect(toggle).toBeVisible();
+    expect(await sendToArticleTab(worker, { type: "toggleVideoSubtitles" })).toBe(true);
+    await expect(toggle).toHaveCount(0);
+    await page.reload();
+    await expect.poll(() => sendToArticleTab(worker, { type: "getVideoSubtitleState" })).toBe(true);
+    await expect(toggle).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
 test("video subtitles have a persistent switch, bounded captions and native restoration", async ({
   playwright,
 }, testInfo) => {
   const { context, worker } = await launchExtension(playwright);
   try {
     await selectMockService(worker, {
-      subtitle: { enabled: false, preTranslation: false },
+      subtitle: { enabled: false, preTranslation: false, enabledSites: [new URL(origin).hostname] },
     });
     const page = await context.newPage();
     const errors: string[] = [];
@@ -292,7 +323,7 @@ test("video subtitles have a persistent switch, bounded captions and native rest
       fullPage: true,
     });
     await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect(toggle).toHaveCount(0);
     await expect(overlay).toHaveCount(0);
     await expect(page.locator(".ytp-caption-window-container")).toHaveCSS("visibility", "visible");
     expect(await page.locator(".ytp-caption-window-container").evaluate((node) =>
@@ -306,9 +337,10 @@ test("video subtitles have a persistent switch, bounded captions and native rest
       )
       .toBe("showing");
     await page.reload();
-    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await expect.poll(() => sendToArticleTab(worker, { type: "getVideoSubtitleState" })).toBe(true);
+    await expect(toggle).toHaveCount(0);
     await expect(overlay).toHaveCount(0);
-    await toggle.press("Space");
+    expect(await sendToArticleTab(worker, { type: "toggleVideoSubtitles" })).toBe(true);
     await expect(toggle).toHaveAttribute("aria-checked", "true");
     await expect(overlay.locator(".translation")).toContainText("[zh]");
     await page.evaluate(() =>

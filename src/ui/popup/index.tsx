@@ -43,13 +43,10 @@ export function Popup(): preact.JSX.Element {
           .sendMessage(tab.id, { type: "getPageState" })
           .catch(() => undefined)) as { translated?: boolean } | undefined;
         setTranslated(state?.translated === true);
-        if (/(^|\.)youtube\.com$|(^|\.)youtubekids\.com$/.test(tab.hostname)) {
-          const video = (await browser.tabs
-            .sendMessage(tab.id, { type: "getVideoSubtitleState" })
-            .catch(() => undefined)) as { enabled?: boolean } | undefined;
-          if (typeof video?.enabled === "boolean")
-            setVideoEnabled(video.enabled);
-        }
+        const video = (await browser.tabs
+          .sendMessage(tab.id, { type: "getVideoSubtitleState" })
+          .catch(() => undefined)) as { enabled?: boolean } | undefined;
+        if (typeof video?.enabled === "boolean") setVideoEnabled(video.enabled);
       })
       .catch(console.error);
     void sendToBackground({ type: "chatgptOauth.status" })
@@ -222,7 +219,14 @@ export function Popup(): preact.JSX.Element {
                 .finally(() => setVideoBusy(false));
             }}
           />
-          <p>{t("popup.videoHint")}</p>
+          <p>
+            {t(
+              hostname &&
+                /(^|\.)youtube\.com$|(^|\.)youtubekids\.com$/.test(hostname)
+                ? "popup.videoHint"
+                : "popup.videoSiteHint",
+            )}
+          </p>
         </section>
       )}
 

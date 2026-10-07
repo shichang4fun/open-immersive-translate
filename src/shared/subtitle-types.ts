@@ -20,6 +20,8 @@ export type SubtitlePosition = "top" | "center" | "bottom";
 export interface SubtitleConfig {
   enabled: boolean;
   youtube: boolean;
+  /** Other hostnames explicitly enabled from the extension popup. */
+  enabledSites: string[];
   preTranslation: boolean;
   fontSize: number;
   sourceColor: string;
@@ -35,6 +37,7 @@ export interface SubtitleConfig {
 export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   enabled: true,
   youtube: true,
+  enabledSites: [],
   preTranslation: true,
   fontSize: 24,
   sourceColor: "#ffffff",

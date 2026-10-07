@@ -10,6 +10,11 @@ import {
 } from "../../src/shared/config";
 
 describe("configuration migration", () => {
+  it("defaults other subtitle sites to opt-in and preserves explicit choices", () => {
+    expect(migrateConfig({ subtitle: { enabled: true } }).subtitle.enabledSites).toEqual([]);
+    expect(migrateConfig({ subtitle: { enabledSites: ["x.com"] } }).subtitle.enabledSites).toEqual(["x.com"]);
+  });
+
   it("applies and validates ChatGPT reasoning defaults", () => {
     expect(serviceConfigSchema.parse({ kind: "chatgpt" })).toMatchObject({
       reasoningEffort: "low",

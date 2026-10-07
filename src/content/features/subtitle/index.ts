@@ -70,9 +70,11 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     siteMatches(location.hostname, site),
   );
   const overrideKey = `${location.href}\u0000${JSON.stringify(blockedSites)}`;
+  const siteEnabled = (): boolean =>
+    config.enabledSites.includes(location.hostname);
   const enabled = (): boolean =>
     config.enabled &&
-    (!isYouTube || config.youtube) &&
+    (isYouTube ? config.youtube : siteEnabled()) &&
     (!blocked || (siteOverride?.key === overrideKey && siteOverride.enabled));
 
   const adapters = matchingSubtitleAdapters(window.location.href);
@@ -100,8 +102,13 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     if (blocked) siteOverride = { key: overrideKey, enabled: turnOn };
     config = {
       ...config,
-      enabled: turnOn,
+      enabled: isYouTube ? turnOn : turnOn || config.enabled,
       youtube: isYouTube && turnOn ? true : config.youtube,
+      enabledSites: isYouTube
+        ? config.enabledSites
+        : turnOn
+          ? [...new Set([...config.enabledSites, location.hostname])]
+          : config.enabledSites.filter((host) => host !== location.hostname),
     };
     if (!turnOn) stopSessions();
     for (const control of controls.values()) control.setState(enabled(), true);
@@ -190,7 +197,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const scanPlayers = (): void => {
     if (disposed) return;
     for (const [media, control] of controls) {
-      if (!media.isConnected) {
+      if (!media.isConnected || (!isYouTube && !siteEnabled())) {
         control.dispose();
         controls.delete(media);
       }
@@ -204,6 +211,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
         sessions.delete(media);
       }
     }
+    if (!isYouTube && !siteEnabled()) return;
     for (const media of document.querySelectorAll("video")) {
       let control = controls.get(media);
       if (!control) {
@@ -234,10 +242,25 @@ export function initSubtitles(ctx: FeatureContext): () => void {
       scanPlayers();
     },
   );
-  const observer = new MutationObserver(scanPlayers);
+  const observer = new MutationObserver((records) => {
+    // Placement writes must not cause an observer loop. Watch page changes,
+    // including modals shown by changing a class rather than inserting nodes.
+    if (
+      records.some(
+        (record) =>
+          !(record.target instanceof Element) ||
+          !record.target.closest(
+            '[data-imt="subtitle-toggle"], [data-imt="subtitle-overlay"]',
+          ),
+      )
+    )
+      scanPlayers();
+  });
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
+    attributes: true,
+    attributeFilter: ["class", "style", "hidden", "open", "aria-hidden"],
   });
   document.addEventListener("loadedmetadata", scanPlayers, true);
   document.addEventListener("loadeddata", scanPlayers, true);

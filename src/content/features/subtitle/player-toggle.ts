@@ -77,7 +77,42 @@ export class SubtitleToggle {
       rect.width < 160 ||
       rect.height < 90 ||
       rect.bottom <= 0 ||
-      rect.top >= window.innerHeight;
+      rect.top >= window.innerHeight ||
+      rect.right <= 0 ||
+      rect.left >= window.innerWidth ||
+      getComputedStyle(this.media).visibility === "hidden";
+    if (this.host.hidden) return;
+
+    // Test the visible part of the video, ignoring our own floating UI.
+    // A modal can cover a video while leaving its geometry unchanged.
+    const x = (Math.max(0, rect.left) + Math.min(innerWidth, rect.right)) / 2;
+    const y = (Math.max(0, rect.top) + Math.min(innerHeight, rect.bottom)) / 2;
+    const top = document
+      .elementsFromPoint?.(x, y)
+      .find(
+        (element) =>
+          !element.closest(
+            '[data-imt="subtitle-toggle"], [data-imt="subtitle-overlay"]',
+          ),
+      );
+    if (top) {
+      const modal = top.closest(
+        '[role="dialog"], [aria-modal="true"], dialog[open]',
+      );
+      const player =
+        this.media.closest('[data-testid="videoPlayer"]') ??
+        this.media.parentElement;
+      this.host.hidden =
+        modal && !modal.contains(this.media)
+          ? true
+          : top !== this.media &&
+            !(
+              player &&
+              player !== document.body &&
+              player !== document.documentElement &&
+              player.contains(top)
+            );
+    }
   };
 
   dispose(): void {
