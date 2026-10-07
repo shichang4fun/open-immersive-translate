@@ -25,6 +25,8 @@ const zhCN = {
   "popup.mode": "显示模式",
   "popup.currentSite": "当前站点",
   "popup.videoSubtitles": "视频双语字幕",
+  "popup.showVideoControl": "显示视频浮窗",
+  "popup.videoControlHint": "仅影响 X 视频上的开关显示，不改变字幕翻译状态。",
   "popup.videoHint": "独立控制视频字幕，自动开启 YouTube CC。",
   "popup.videoSiteHint":
     "仅为当前网站开启。需要视频提供字幕，不支持语音转字幕。",
@@ -310,6 +312,9 @@ const en: Record<I18nKey, string> = {
   "popup.mode": "Display mode",
   "popup.currentSite": "Current site",
   "popup.videoSubtitles": "Bilingual video subtitles",
+  "popup.showVideoControl": "Show video floating control",
+  "popup.videoControlHint":
+    "Show the switch on X videos without changing subtitle translation.",
   "popup.videoHint": "Independent of page translation. Turns on YouTube CC.",
   "popup.videoSiteHint":
     "Enable for this site only. Requires existing captions; no speech transcription.",
@@ -602,6 +607,8 @@ const zhTW: Partial<Record<I18nKey, string>> = {
   "popup.targetLanguage": "目標語言",
   "popup.currentSite": "目前網站",
   "popup.videoSubtitles": "影片雙語字幕",
+  "popup.showVideoControl": "顯示影片浮窗",
+  "popup.videoControlHint": "僅影響 X 影片上的開關顯示，不改變字幕翻譯狀態。",
   "popup.videoHint": "獨立控制影片字幕，自動開啟 YouTube CC。",
   "popup.videoSiteHint":
     "僅為目前網站開啟。需要影片提供字幕，不支援語音轉字幕。",
@@ -866,6 +873,9 @@ const ja: Partial<Record<I18nKey, string>> = {
   "popup.mode": "表示モード",
   "popup.currentSite": "現在のサイト",
   "popup.videoSubtitles": "動画の二言語字幕",
+  "popup.showVideoControl": "動画のフローティングスイッチを表示",
+  "popup.videoControlHint":
+    "X 動画のスイッチ表示のみを変更します。字幕翻訳には影響しません。",
   "popup.videoHint": "ページ翻訳とは別に YouTube CC を有効にします。",
   "popup.videoSiteHint":
     "このサイトのみ有効にします。既存の字幕が必要です。音声の文字起こしには対応していません。",

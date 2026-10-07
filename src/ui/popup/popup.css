@@ -156,6 +156,11 @@ body {
   font-size: 12px;
   line-height: 1.5;
 }
+.popup-video-controls {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--ui-border);
+}
 .popup-footer {
   display: flex;
   align-items: center;

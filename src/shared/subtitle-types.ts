@@ -22,6 +22,8 @@ export interface SubtitleConfig {
   youtube: boolean;
   /** Other hostnames explicitly enabled from the extension popup. */
   enabledSites: string[];
+  /** Display X's player switch independently of subtitle translation. */
+  showXVideoToggle: boolean;
   preTranslation: boolean;
   fontSize: number;
   sourceColor: string;
@@ -38,6 +40,7 @@ export const DEFAULT_SUBTITLE_CONFIG: SubtitleConfig = {
   enabled: true,
   youtube: true,
   enabledSites: [],
+  showXVideoToggle: false,
   preTranslation: true,
   fontSize: 24,
   sourceColor: "#ffffff",

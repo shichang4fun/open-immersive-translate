@@ -315,6 +315,7 @@ export const configSchema: z.ZodType<Config> = z.object({
       enabled: z.boolean().default(true),
       youtube: z.boolean().default(true),
       enabledSites: z.array(z.string()).default([]),
+      showXVideoToggle: z.boolean().default(false),
       preTranslation: z.boolean().default(true),
       fontSize: z.number().min(10).max(72).default(24),
       sourceColor: z

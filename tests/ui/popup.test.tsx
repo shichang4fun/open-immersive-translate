@@ -76,6 +76,60 @@ afterEach(() => {
 });
 
 describe("Popup", () => {
+  it("restores the X visibility switch if saving fails", async () => {
+    browserMock.tabs.query.mockResolvedValue([
+      { id: 42, url: "https://x.com/home" },
+    ]);
+    browserMock.tabs.sendMessage.mockResolvedValue({ enabled: false });
+    render(<Popup />);
+    const visibility = await screen.findByRole("checkbox", {
+      name: "显示视频浮窗",
+    });
+    browserMock.storage.local.set.mockRejectedValueOnce(new Error("disk full"));
+    fireEvent.click(visibility);
+    await screen.findByRole("alert");
+    expect((visibility as HTMLInputElement).checked).toBe(false);
+    expect(stored.subtitle.enabledSites).toEqual([]);
+  });
+
+  it("persists X floating controls separately from subtitle translation", async () => {
+    browserMock.tabs.query.mockResolvedValue([
+      { id: 42, url: "https://x.com/home" },
+    ]);
+    browserMock.tabs.sendMessage.mockResolvedValue({ enabled: false });
+    render(<Popup />);
+    const visibility = await screen.findByRole("checkbox", {
+      name: "显示视频浮窗",
+    });
+    expect((visibility as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(visibility);
+    await waitFor(() =>
+      expect(stored.subtitle).toMatchObject({
+        showXVideoToggle: true,
+        enabledSites: [],
+      }),
+    );
+    expect(browserMock.tabs.sendMessage).not.toHaveBeenCalledWith(42, {
+      type: "toggleVideoSubtitles",
+    });
+    cleanup();
+    render(<Popup />);
+    expect(
+      (
+        (await screen.findByRole("checkbox", {
+          name: "显示视频浮窗",
+        })) as HTMLInputElement
+      ).checked,
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "显示视频浮窗" }));
+    await waitFor(() =>
+      expect(stored.subtitle).toMatchObject({
+        showXVideoToggle: false,
+        enabledSites: [],
+      }),
+    );
+  });
+
   it("reads the translated state when reopened and exposes settings directly", async () => {
     browserMock.tabs.sendMessage.mockResolvedValue({ translated: true });
     render(<Popup />);

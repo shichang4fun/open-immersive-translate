@@ -32,6 +32,7 @@ export function Popup(): preact.JSX.Element {
   const [chatgptLoggedIn, setChatgptLoggedIn] = useState(false);
   const [videoEnabled, setVideoEnabled] = useState<boolean>();
   const [videoBusy, setVideoBusy] = useState(false);
+  const [videoControlBusy, setVideoControlBusy] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,6 +94,7 @@ export function Popup(): preact.JSX.Element {
   );
 
   const hostname = activeTab.hostname;
+  const isX = !!hostname && /(^|\.)(x|twitter)\.com$/.test(hostname);
   const always = hostname
     ? config.alwaysTranslateSites.includes(hostname)
     : false;
@@ -197,7 +199,7 @@ export function Popup(): preact.JSX.Element {
         <section class="popup-video">
           <Toggle
             checked={videoEnabled}
-            disabled={videoBusy}
+            disabled={videoBusy || videoControlBusy}
             label={t("popup.videoSubtitles")}
             onChange={(checked) => {
               if (activeTab.id === undefined || videoBusy) return;
@@ -227,6 +229,28 @@ export function Popup(): preact.JSX.Element {
                 : "popup.videoSiteHint",
             )}
           </p>
+          {isX && (
+            <div class="popup-video-controls">
+              <Toggle
+                label={t("popup.showVideoControl")}
+                checked={config.subtitle.showXVideoToggle}
+                disabled={videoBusy || videoControlBusy}
+                onChange={(checked) => {
+                  setVideoControlBusy(true);
+                  void updateConfig((current) => ({
+                    subtitle: {
+                      ...current.subtitle,
+                      showXVideoToggle: checked,
+                    },
+                  }))
+                    .then(() => setToggleError(false))
+                    .catch(() => setToggleError(true))
+                    .finally(() => setVideoControlBusy(false));
+                }}
+              />
+              <p>{t("popup.videoControlHint")}</p>
+            </div>
+          )}
         </section>
       )}
 

@@ -69,6 +69,45 @@ const button = () =>
     .shadowRoot!.querySelector("button")!;
 
 describe("subtitle feature initialization", () => {
+  it("can hide X controls while continuing caption translation", async () => {
+    vi.stubGlobal(
+      "location",
+      new URL("https://x.com/example/status/visibility"),
+    );
+    const { ctx } = player();
+    Object.assign(ctx.config.subtitle, {
+      enabledSites: ["x.com"],
+      showXVideoToggle: false,
+    });
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
+      await vi.waitFor(() => expect(ctx.translateText).toHaveBeenCalled());
+      expect(
+        document.querySelector('[data-imt="subtitle-overlay"]'),
+      ).not.toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("can show the X switch while translation remains off", () => {
+    vi.stubGlobal(
+      "location",
+      new URL("https://x.com/example/status/visibility-off"),
+    );
+    const { ctx, native } = player();
+    Object.assign(ctx.config.subtitle, { showXVideoToggle: true });
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(button().getAttribute("aria-checked")).toBe("false");
+      expect(ctx.translateText).not.toHaveBeenCalled();
+      expect(native.mode).toBe("showing");
+    } finally {
+      dispose();
+    }
+  });
+
   it("does not create controls or translate captions outside YouTube by default", () => {
     vi.stubGlobal("location", new URL("https://x.com/example/status/1"));
     const { ctx, native } = player();
@@ -101,9 +140,7 @@ describe("subtitle feature initialization", () => {
           subtitle: expect.objectContaining({ enabledSites: ["x.com"] }),
         },
       });
-      expect(
-        document.querySelector('[data-imt="subtitle-toggle"]'),
-      ).not.toBeNull();
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
       expect(await send("toggleVideoSubtitles")).toEqual({ enabled: false });
       expect(browserMock.runtime.sendMessage).toHaveBeenLastCalledWith({
         type: "setConfig",

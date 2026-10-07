@@ -72,6 +72,9 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const overrideKey = `${location.href}\u0000${JSON.stringify(blockedSites)}`;
   const siteEnabled = (): boolean =>
     config.enabledSites.includes(location.hostname);
+  const isX = /(^|\.)(x|twitter)\.com$/.test(location.hostname);
+  const controlsVisible = (): boolean =>
+    isX ? config.showXVideoToggle : isYouTube || siteEnabled();
   const enabled = (): boolean =>
     config.enabled &&
     (isYouTube ? config.youtube : siteEnabled()) &&
@@ -197,7 +200,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const scanPlayers = (): void => {
     if (disposed) return;
     for (const [media, control] of controls) {
-      if (!media.isConnected || (!isYouTube && !siteEnabled())) {
+      if (!media.isConnected || !controlsVisible()) {
         control.dispose();
         controls.delete(media);
       }
@@ -211,7 +214,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
         sessions.delete(media);
       }
     }
-    if (!isYouTube && !siteEnabled()) return;
+    if (!controlsVisible()) return;
     for (const media of document.querySelectorAll("video")) {
       let control = controls.get(media);
       if (!control) {

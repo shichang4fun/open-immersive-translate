@@ -183,6 +183,52 @@ test("YouTube loads captions with CC off and offers a compact independent popup 
   }
 });
 
+test("X popup persists floating control visibility independently of captions", async ({ playwright }, testInfo) => {
+  const { context, worker, extensionId } = await launchExtension(playwright);
+  try {
+    await selectMockService(worker, { subtitle: { enabled: true, enabledSites: ["x.com"], showXVideoToggle: false } });
+    const popup = await context.newPage();
+    const page = await context.newPage();
+    await page.route("https://x.com/imt-fixture", route => route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><meta charset="utf-8"><style>video{width:600px;height:350px;background:#222}</style><div data-testid="videoPlayer"><video></video></div><script>const track=document.querySelector('video').addTextTrack('subtitles','English','en');track.mode='showing';track.addCue(new VTTCue(0,30,'X visibility fixture.'));</script>`,
+    }));
+    await page.goto("https://x.com/imt-fixture");
+    const floating = page.locator('[data-imt="subtitle-toggle"]');
+    const translation = page.locator('[data-imt="subtitle-overlay"] .translation');
+    await expect(translation).toContainText("[zh] X visibility fixture.");
+    await expect(floating).toHaveCount(0);
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await page.bringToFront();
+    await popup.reload();
+    const visibility = popup.getByRole("checkbox", { name: "Show video floating control" });
+    const subtitles = popup.getByRole("checkbox", { name: "Bilingual video subtitles" });
+    await expect(visibility).not.toBeChecked();
+    await expect(subtitles).toBeChecked();
+    await visibility.check();
+    await expect(floating).toBeVisible();
+    await subtitles.uncheck();
+    await expect(floating).toBeVisible();
+    await expect(floating.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+    await expect(translation).toHaveCount(0);
+    await visibility.uncheck();
+    await expect(floating).toHaveCount(0);
+    await subtitles.check();
+    await expect(translation).toContainText("[zh] X visibility fixture.");
+    await expect(floating).toHaveCount(0);
+    await page.reload();
+    await expect(translation).toContainText("[zh] X visibility fixture.");
+    await expect(floating).toHaveCount(0);
+    await popup.reload();
+    await expect(visibility).not.toBeChecked();
+    await expect(subtitles).toBeChecked();
+    await popup.setViewportSize({ width: 380, height: 600 });
+    await popup.screenshot({ path: testInfo.outputPath("x-popup-floating-control.png"), fullPage: true });
+  } finally {
+    await context.close();
+  }
+});
+
 test("other sites require opt-in and video controls stay behind image modals", async ({ playwright }, testInfo) => {
   const { context, worker } = await launchExtension(playwright);
   try {

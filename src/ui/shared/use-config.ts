@@ -70,6 +70,7 @@ export function useConfig(): ConfigState {
           resolveResult(saved);
         } catch (cause) {
           const nextError = asError(cause);
+          if (configRef.current === optimistic) applyConfig(current);
           setError(nextError);
           rejectResult(nextError);
         }
