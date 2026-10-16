@@ -141,11 +141,36 @@ test("YouTube loads captions with CC off and offers a compact independent popup 
       }
       return route.fulfill({
         contentType: "text/html",
-        body: `<!doctype html><html><meta charset="utf-8"><style>video{width:800px;height:450px;background:#222}.html5-video-player{position:relative}.ytp-right-controls{height:48px}</style><div class="html5-video-player"><video preload="auto" src="data:audio/wav;base64,${wav.toString("base64")}"></video><div class="ytp-caption-window-container">Native captions</div><div class="ytp-right-controls"><button class="ytp-subtitles-button" aria-pressed="false">CC</button></div></div><script>document.querySelector('button').onclick=function(){const on=this.getAttribute('aria-pressed')!=='true';this.setAttribute('aria-pressed',String(on));if(on){const xhr=new XMLHttpRequest();xhr.open('GET','https://www.youtube.com/api/timedtext?fmt=json3');xhr.send();}};</script></html>`,
+        body: `<!doctype html><html><meta charset="utf-8"><style>video{width:800px;height:450px;background:#222}.html5-video-player{position:relative}.ytp-right-controls{height:48px}</style>
+          <div id="movie_player" class="html5-video-player"><video preload="auto" src="data:audio/wav;base64,${wav.toString("base64")}"></video><div class="ytp-caption-window-container">Native captions</div><div class="ytp-right-controls"><button class="ytp-subtitles-button" aria-pressed="false">CC</button></div></div>
+          <div id="inline-preview-player" class="html5-video-player"><video></video><div class="ytp-right-controls"><button class="ytp-subtitles-button" aria-pressed="false">Preview CC</button></div></div>
+          <script>document.querySelector('button').onclick=function(){const on=this.getAttribute('aria-pressed')!=='true';this.setAttribute('aria-pressed',String(on));if(on){const xhr=new XMLHttpRequest();xhr.open('GET','https://www.youtube.com/api/timedtext?fmt=json3');xhr.send();}};</script></html>`,
       });
     });
-    await page.goto("https://www.youtube.com/watch?v=fixture");
-    const cc = page.locator(".ytp-subtitles-button");
+    await page.goto("https://www.youtube.com/");
+    await expect
+      .poll(() => contentState(worker, "https://www.youtube.com/"))
+      .toMatchObject({ ready: true });
+    const floating = page.locator('[data-imt="subtitle-toggle"]');
+    const cc = page.locator("#movie_player .ytp-subtitles-button");
+    await page.locator("#inline-preview-player video").hover();
+    await expect(floating).toHaveCount(0);
+    await expect(cc).toHaveAttribute("aria-pressed", "false");
+    expect(captionRequests).toBe(0);
+    const navigate = async (path: string) => {
+      await page.evaluate((next) => {
+        history.pushState({}, "", next);
+        document.dispatchEvent(new Event("yt-navigate-finish"));
+      }, path);
+    };
+    await navigate("/watch?v=fixture");
+    await expect(floating).toHaveCount(1);
+    await expect(
+      page.locator('#movie_player [data-imt="subtitle-toggle"]'),
+    ).toHaveCount(1);
+    await expect(
+      page.locator("#inline-preview-player .ytp-subtitles-button"),
+    ).toHaveAttribute("aria-pressed", "false");
     await expect(cc).toHaveAttribute("aria-pressed", "true");
     await expect(
       page.locator('[data-imt="subtitle-overlay"] .translation'),
@@ -178,6 +203,15 @@ test("YouTube loads captions with CC off and offers a compact independent popup 
     await expect(popup.getByRole("menu")).toBeVisible();
     await popup.keyboard.press("Escape");
     await expect(popup.getByRole("menu")).toHaveCount(0);
+    await navigate("/");
+    await expect(floating).toHaveCount(0);
+    await expect(page.locator('[data-imt="subtitle-overlay"]')).toHaveCount(0);
+    await expect(cc).toHaveAttribute("aria-pressed", "false");
+    await navigate("/watch?v=fixture");
+    await expect(floating).toHaveCount(1);
+    await expect(
+      page.locator('[data-imt="subtitle-overlay"] .translation'),
+    ).toContainText("[zh] Hello from YouTube.");
   } finally {
     await context.close();
   }
@@ -801,7 +835,7 @@ async function runPageCommand(
   return sendToArticleTab(worker, { type: "pageControllerCommand", command });
 }
 
-async function contentState(worker: Worker): Promise<{
+async function contentState(worker: Worker, pageOrigin = origin): Promise<{
   ready: boolean;
   active: boolean;
   error?: string;
@@ -824,7 +858,7 @@ async function contentState(worker: Worker): Promise<{
       active: boolean;
       error?: string;
     };
-  }, origin);
+  }, pageOrigin);
 }
 
 test("translates article paragraphs once and restores the DOM", async ({

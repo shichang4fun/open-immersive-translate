@@ -73,8 +73,17 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   const siteEnabled = (): boolean =>
     config.enabledSites.includes(location.hostname);
   const isX = /(^|\.)(x|twitter)\.com$/.test(location.hostname);
+  // YouTube reuses video elements for hover previews and its mini player.
+  // Check the current route on every scan because navigation happens in-place.
+  const isPlaybackPage = (): boolean =>
+    !isYouTube ||
+    (location.pathname === "/watch" &&
+      Boolean(new URLSearchParams(location.search).get("v")));
+  const handlesMedia = (media: HTMLMediaElement): boolean =>
+    isPlaybackPage() && (!isYouTube || !!media.closest("#movie_player"));
   const controlsVisible = (): boolean =>
-    isX ? config.showXVideoToggle : isYouTube || siteEnabled();
+    isPlaybackPage() &&
+    (isX ? config.showXVideoToggle : isYouTube || siteEnabled());
   const enabled = (): boolean =>
     config.enabled &&
     (isYouTube ? config.youtube : siteEnabled()) &&
@@ -136,7 +145,8 @@ export function initSubtitles(ctx: FeatureContext): () => void {
       track.media ??
       document.querySelector<HTMLMediaElement>("video, audio") ??
       undefined;
-    if (disposed || !media || !track.cues.length) return;
+    if (disposed || !media || !handlesMedia(media) || !track.cues.length)
+      return;
     capturedTracks.set(media, {
       key: mediaKey(media),
       track: { ...track, media },
@@ -199,8 +209,9 @@ export function initSubtitles(ctx: FeatureContext): () => void {
 
   const scanPlayers = (): void => {
     if (disposed) return;
+    if (!isPlaybackPage()) stopSessions();
     for (const [media, control] of controls) {
-      if (!media.isConnected || !controlsVisible()) {
+      if (!media.isConnected || !controlsVisible() || !handlesMedia(media)) {
         control.dispose();
         controls.delete(media);
       }
@@ -208,6 +219,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     for (const [media, session] of sessions) {
       if (
         !media.isConnected ||
+        !handlesMedia(media) ||
         capturedTracks.get(media)?.key !== mediaKey(media)
       ) {
         session.dispose();
@@ -216,6 +228,7 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     }
     if (!controlsVisible()) return;
     for (const media of document.querySelectorAll("video")) {
+      if (!handlesMedia(media)) continue;
       let control = controls.get(media);
       if (!control) {
         control = new SubtitleToggle(media, () => {
@@ -267,6 +280,12 @@ export function initSubtitles(ctx: FeatureContext): () => void {
   });
   document.addEventListener("loadedmetadata", scanPlayers, true);
   document.addEventListener("loadeddata", scanPlayers, true);
+  const onNavigation = (): void => {
+    scanPlayers();
+    replayTracks();
+  };
+  document.addEventListener("yt-navigate-finish", onNavigation);
+  window.addEventListener("popstate", onNavigation);
   scanPlayers();
   replayTracks();
 
@@ -316,6 +335,8 @@ export function initSubtitles(ctx: FeatureContext): () => void {
     observer.disconnect();
     document.removeEventListener("loadedmetadata", scanPlayers, true);
     document.removeEventListener("loadeddata", scanPlayers, true);
+    document.removeEventListener("yt-navigate-finish", onNavigation);
+    window.removeEventListener("popstate", onNavigation);
     browser.runtime.onMessage.removeListener(onMessage);
     document.removeEventListener(
       "imt:video-subtitle-pretranslation",

@@ -37,7 +37,7 @@ afterEach(() => {
 
 function player(enabled = true, blocked = false) {
   document.body.innerHTML =
-    '<div class="html5-video-player"><video><track kind="subtitles"></video><div class="ytp-right-controls"></div></div>';
+    '<div id="movie_player" class="html5-video-player"><video><track kind="subtitles"></video><div class="ytp-right-controls"></div></div>';
   const video = document.querySelector("video")!;
   const native = {
     mode: "showing",
@@ -69,6 +69,68 @@ const button = () =>
     .shadowRoot!.querySelector("button")!;
 
 describe("subtitle feature initialization", () => {
+  it.each([
+    "/",
+    "/results?search_query=test",
+    "/feed/subscriptions",
+    "/@channel",
+    "/watch",
+  ])("does not add subtitle UI or translate YouTube previews on %s", (path) => {
+    vi.stubGlobal("location", new URL(path, "https://www.youtube.com"));
+    const { ctx, native } = player();
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
+      expect(
+        document.querySelector('[data-imt="subtitle-overlay"]'),
+      ).toBeNull();
+      expect(ctx.translateText).not.toHaveBeenCalled();
+      expect(native.mode).toBe("showing");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("only adds controls to the main player, not related-video previews", () => {
+    const { ctx, video, native } = player();
+    video.parentElement!.id = "inline-preview-player";
+    const main = document.createElement("div");
+    main.id = "movie_player";
+    main.className = "html5-video-player";
+    main.innerHTML = '<video></video><div class="ytp-right-controls"></div>';
+    document.body.append(main);
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(
+        document.querySelectorAll('[data-imt="subtitle-toggle"]'),
+      ).toHaveLength(1);
+      expect(main.querySelector('[data-imt="subtitle-toggle"]')).not.toBeNull();
+      expect(ctx.translateText).not.toHaveBeenCalled();
+      expect(native.mode).toBe("showing");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("removes controls and translated captions when navigating back to the homepage", () => {
+    const { ctx, native } = player();
+    const dispose = initSubtitles(ctx);
+    try {
+      expect(
+        document.querySelector('[data-imt="subtitle-overlay"]'),
+      ).not.toBeNull();
+      vi.stubGlobal("location", new URL("https://www.youtube.com/"));
+      document.dispatchEvent(new Event("yt-navigate-finish"));
+      expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull();
+      expect(
+        document.querySelector('[data-imt="subtitle-overlay"]'),
+      ).toBeNull();
+      expect(native.mode).toBe("showing");
+    } finally {
+      dispose();
+    }
+  });
+
   it("can hide X controls while continuing caption translation", async () => {
     vi.stubGlobal(
       "location",
@@ -226,7 +288,10 @@ describe("subtitle feature initialization", () => {
     await vi.waitFor(() =>
       expect(document.querySelector('[data-imt="subtitle-toggle"]')).toBeNull(),
     );
-    document.body.append(document.createElement("video"));
+    const main = document.createElement("div");
+    main.id = "movie_player";
+    main.append(document.createElement("video"));
+    document.body.append(main);
     await vi.waitFor(() =>
       expect(
         document.querySelectorAll('[data-imt="subtitle-toggle"]'),
