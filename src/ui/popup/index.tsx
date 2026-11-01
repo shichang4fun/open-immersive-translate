@@ -1,6 +1,7 @@
 import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import browser from "webextension-polyfill";
+import { shortcutsUrl } from "../shared/platform";
 
 import { LANGUAGE_CODES } from "../../shared/lang";
 import { sendToBackground, sendToTab } from "../../shared/messages";
@@ -345,7 +346,7 @@ export function Popup(): preact.JSX.Element {
                 label={t("popup.shortcuts")}
                 onClick={() =>
                   void browser.tabs.create({
-                    url: "chrome://extensions/shortcuts",
+                    url: shortcutsUrl(),
                   })
                 }
               />

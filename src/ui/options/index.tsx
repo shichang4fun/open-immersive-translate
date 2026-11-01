@@ -45,6 +45,7 @@ import {
   type I18nKey,
 } from "../shared/i18n";
 import { useKConfig, type KConfigUpdater } from "../shared/k-config";
+import { isSafari } from "../shared/platform";
 import {
   clearCache,
   getBrowserCommandBindings,
@@ -1511,9 +1512,11 @@ function ShortcutsPanel(): preact.JSX.Element {
           );
         })}
       </dl>
-      <a href="chrome://extensions/shortcuts" target="_blank">
-        {t("shortcuts.manage")}
-      </a>
+      {!isSafari() && (
+        <a href="chrome://extensions/shortcuts" target="_blank">
+          {t("shortcuts.manage")}
+        </a>
+      )}
     </Card>
   );
 }

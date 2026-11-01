@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const browserMock = vi.hoisted(() => ({
   runtime: {
     sendMessage: vi.fn(),
+    getURL: vi.fn((path: string) => `chrome-extension://test/${path}`),
   },
   storage: {
     local: {

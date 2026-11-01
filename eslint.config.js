@@ -6,6 +6,8 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "dist-firefox/**",
+      "dist-safari/**",
+      "build-safari/**",
       "dist-userscript/**",
       "node_modules/**",
       ".vite/**",

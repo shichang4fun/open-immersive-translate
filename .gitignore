@@ -1,6 +1,8 @@
 node_modules/
 dist/
 dist-firefox/
+dist-safari/
+build-safari/
 dist-userscript/
 .vite/
 playwright-report/

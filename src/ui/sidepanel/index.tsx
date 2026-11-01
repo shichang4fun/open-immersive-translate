@@ -65,7 +65,12 @@ export function SidePanel({ assistant }: SidePanelProps): preact.JSX.Element {
   const [status, setStatus] = useState<string>();
 
   useEffect(() => {
-    void activeBrowserTab().then(async (tab) => {
+    const sourceTab = new URLSearchParams(location.search).get("tabId");
+    const initialTab =
+      sourceTab && /^\d+$/.test(sourceTab)
+        ? browser.tabs.get(Number(sourceTab)).catch(() => activeBrowserTab())
+        : activeBrowserTab();
+    void initialTab.then(async (tab) => {
       setTabId(tab.id);
       if (tab.id === undefined) return;
       setPage(await readPageState(tab.id, tab.title, tab.url));

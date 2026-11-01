@@ -52,6 +52,7 @@ import {
 } from "./services";
 import { TranslateError, type TranslationService } from "./services/base";
 import { runServiceTest } from "./service-test";
+import { openSidePanel, sidePanelApi } from "./side-panel";
 import { getChatgptModels } from "./services/chatgpt-oauth/service";
 import {
   cancelChatgptOauth,
@@ -61,19 +62,6 @@ import {
   registerChatgptOauthPolling,
   startChatgptOauth,
 } from "./services/chatgpt-oauth/auth";
-
-interface NativeSidePanelApi {
-  open(options: { tabId: number }): Promise<void>;
-  setPanelBehavior(options: { openPanelOnActionClick: boolean }): Promise<void>;
-}
-
-function sidePanelApi(): NativeSidePanelApi | undefined {
-  return (
-    globalThis as unknown as {
-      chrome?: { sidePanel?: NativeSidePanelApi };
-    }
-  ).chrome?.sidePanel;
-}
 
 function actionApi(): BadgeActionApi {
   const native = (
@@ -278,11 +266,7 @@ browser.runtime.onMessage.addListener(
           streaming: typeof service.onPartial === "function",
         }));
       case "openSidePanel": {
-        const api = sidePanelApi();
-        if (!api) return Promise.resolve({ opened: false });
-        return api
-          .open({ tabId: request.tabId })
-          .then(() => ({ opened: true }));
+        return openSidePanel(request.tabId).then(() => ({ opened: true }));
       }
       default:
         return undefined;
@@ -414,7 +398,7 @@ browser.commands.onCommand.addListener((command) => {
       await browser.tabs.sendMessage(tabId, message, { frameId: 0 });
     },
     async openSidePanel(tabId) {
-      await sidePanelApi()?.open({ tabId });
+      await openSidePanel(tabId);
     },
   }).catch(() => undefined);
 });
@@ -430,7 +414,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
       await browser.tabs.create({ url: browser.runtime.getURL(path) });
     },
     async openSidePanel(tabId) {
-      await sidePanelApi()?.open({ tabId });
+      await openSidePanel(tabId);
     },
   }).catch(() => undefined);
 });
