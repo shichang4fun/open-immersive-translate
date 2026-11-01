@@ -68,6 +68,13 @@ afterEach(() => {
 });
 
 describe("weekly translation backups", () => {
+  it("does not register desktop archive jobs on iPhone", () => {
+    vi.stubEnv("VITE_SAFARI_PLATFORM", "ios");
+    registerWeeklyExport();
+    expect(mocks.onAlarm).not.toHaveBeenCalled();
+    expect(mocks.onStartup).not.toHaveBeenCalled();
+    expect(mocks.write).not.toHaveBeenCalled();
+  });
   it("uses the isolated port while keeping the destination on loopback", async () => {
     vi.stubEnv("VITE_LOCAL_ARCHIVE_PORT", "54321");
     await runWeeklyExport();

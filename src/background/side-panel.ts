@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { isIOSBuild } from "../shared/platform";
 
 interface NativeSidePanelApi {
   open(options: { tabId: number }): Promise<void>;
@@ -20,8 +21,13 @@ export async function openSidePanel(tabId: number): Promise<void> {
     await native.open({ tabId });
     return;
   }
+  const url = `${browser.runtime.getURL("src/ui/sidepanel/index.html")}?tabId=${tabId}`;
+  if (isIOSBuild()) {
+    await browser.tabs.create({ url });
+    return;
+  }
   await browser.windows.create({
-    url: `${browser.runtime.getURL("src/ui/sidepanel/index.html")}?tabId=${tabId}`,
+    url,
     type: "popup",
     width: 440,
     height: 720,

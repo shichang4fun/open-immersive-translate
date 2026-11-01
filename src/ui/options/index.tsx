@@ -46,6 +46,8 @@ import {
 } from "../shared/i18n";
 import { useKConfig, type KConfigUpdater } from "../shared/k-config";
 import { isSafari } from "../shared/platform";
+import { ProviderConsent } from "../shared/provider-consent";
+import { isIOSBuild } from "../../shared/platform";
 import {
   clearCache,
   getBrowserCommandBindings,
@@ -620,6 +622,7 @@ function ServiceCard({
         />
       }
     >
+      <ProviderConsent serviceId={serviceId} service={service} />
       {!pairSupported && (
         <p role="alert" class="ui-status ui-status-error">
           {t("services.unsupportedPair", { from, to })}
@@ -1631,22 +1634,26 @@ function DataPanel({ config, onPatch }: PanelProps): preact.JSX.Element {
         <p class="ui-status">
           保存原文、译文、来源网址、标题、语言、请求的翻译服务、首次保存和最近出现时间。旧记录无法恢复的首次时间留空。记录保存在本机，清空缓存不会删除这些记录。
         </p>
-        <Toggle
-          checked={config.weeklyTranslationExport}
-          label="每周自动导出翻译记录"
-          onChange={(weeklyTranslationExport) =>
-            void onPatch({ weeklyTranslationExport })
-          }
-        />
-        <p class="ui-status">
-          每周日北京时间 23:00，由插件后台和本机存档程序直接保存 JSONL、CSV
-          和校验文件。 关闭 Chrome 错过后，下次启动补一次。无需 Codex
-          或模型调用，不会发起新翻译。
-        </p>
-        {weeklyStatus && (
-          <p class="ui-status" role="status">
-            {weeklyStatus}
-          </p>
+        {!isIOSBuild() && (
+          <>
+            <Toggle
+              checked={config.weeklyTranslationExport}
+              label="每周自动导出翻译记录"
+              onChange={(weeklyTranslationExport) =>
+                void onPatch({ weeklyTranslationExport })
+              }
+            />
+            <p class="ui-status">
+              每周日北京时间 23:00，由插件后台和本机存档程序直接保存 JSONL、CSV
+              和校验文件。 关闭 Chrome 错过后，下次启动补一次。无需 Codex
+              或模型调用，不会发起新翻译。
+            </p>
+            {weeklyStatus && (
+              <p class="ui-status" role="status">
+                {weeklyStatus}
+              </p>
+            )}
+          </>
         )}
         <p>
           {historyCount === undefined

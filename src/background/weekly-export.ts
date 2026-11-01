@@ -1,4 +1,5 @@
 import browser from "webextension-polyfill";
+import { isIOSBuild } from "../shared/platform";
 
 import { loadConfig, onConfigChange } from "../shared/config";
 import type { WeeklyExportState } from "../shared/translation-history";
@@ -128,6 +129,8 @@ async function catchUp(): Promise<void> {
 }
 
 export function registerWeeklyExport(): void {
+  // The desktop archive companion is not available on iPhone/iPad.
+  if (isIOSBuild()) return;
   const refresh = (): void => {
     void scheduleWeeklyExport()
       .then(catchUp)

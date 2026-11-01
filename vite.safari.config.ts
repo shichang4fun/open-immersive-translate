@@ -5,13 +5,19 @@ import { build as viteBuild, defineConfig, type Plugin } from "vite";
 
 import chromeManifest from "./src/manifest.ts";
 
-export function transformSafariManifest(source: Record<string, unknown>) {
+export function transformSafariManifest(
+  source: Record<string, unknown>,
+  ios = false,
+) {
   const manifest = { ...source };
   delete manifest.side_panel;
   delete manifest.browser_specific_settings;
   manifest.permissions = [
     ...(source.permissions as string[]).filter(
-      (permission) => permission !== "sidePanel" && permission !== "webRequest",
+      (permission) =>
+        permission !== "sidePanel" &&
+        permission !== "webRequest" &&
+        (!ios || permission !== "contextMenus"),
     ),
     "unlimitedStorage",
   ];
@@ -25,19 +31,34 @@ export function transformSafariManifest(source: Record<string, unknown>) {
     "128": "icons/safari-128.png",
     "512": "icons/safari-512.png",
   };
+  if (ios) delete manifest.commands;
   return manifest;
 }
 
 export default defineConfig(async (env) => {
+  const ios = env.mode === "ios";
+  const define = {
+    "import.meta.env.VITE_SAFARI_PLATFORM": JSON.stringify(
+      ios ? "ios" : "macos",
+    ),
+    ...(ios
+      ? {
+          "import.meta.env.VITE_LOCAL_ARCHIVE_TOKEN": JSON.stringify(""),
+          "import.meta.env.VITE_LOCAL_ARCHIVE_PORT": JSON.stringify(""),
+        }
+      : {}),
+  };
   const source = await (typeof chromeManifest === "function"
     ? chromeManifest(env)
     : chromeManifest);
   return {
+    define,
     plugins: [
       crx({
         browser: "firefox",
         manifest: transformSafariManifest(
           source as unknown as Record<string, unknown>,
+          ios,
         ) as unknown as ManifestV3Export,
       }),
       {
@@ -50,6 +71,7 @@ export default defineConfig(async (env) => {
           await viteBuild({
             configFile: false,
             mode: env.mode,
+            define,
             logLevel: "warn",
             build: {
               outDir: options.dir,
@@ -68,8 +90,11 @@ export default defineConfig(async (env) => {
             `${options.dir}/background.html`,
             '<!doctype html><meta charset="utf-8"><script src="background.js"></script>\n',
           );
-          // MV3 background scripts are nonpersistent by definition in Safari.
-          manifest.background = { page: "background.html" };
+          // App Store validation requires this flag explicitly on iOS/iPadOS.
+          manifest.background = {
+            page: "background.html",
+            ...(ios ? { persistent: false } : {}),
+          };
           for (const resource of manifest.web_accessible_resources ?? []) {
             delete resource.use_dynamic_url;
           }
@@ -78,7 +103,7 @@ export default defineConfig(async (env) => {
       } satisfies Plugin,
     ],
     build: {
-      outDir: "dist-safari",
+      outDir: ios ? "dist-safari-ios" : "dist-safari",
       rollupOptions: {
         input: {
           pdf: fileURLToPath(new URL("./src/pdf/index.html", import.meta.url)),

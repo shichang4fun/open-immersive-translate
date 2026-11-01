@@ -12,6 +12,8 @@ import type {
 } from "../shared/types";
 import { loadConfig } from "../shared/config";
 import { translationCache, type TranslationCacheKey } from "./cache";
+import { isIOSBuild } from "../shared/platform";
+import { requireProviderConsent } from "../shared/provider-consent";
 import type { TranslationCache } from "./cache";
 import {
   TranslateError,
@@ -505,6 +507,10 @@ export class TranslationScheduler {
     priority: boolean,
     signal: AbortSignal,
   ): Promise<BatchValue[]> {
+    if (isIOSBuild()) {
+      const config = await this.configProvider();
+      await requireProviderConsent(service.id, config.services[service.id]);
+    }
     const call = async (callTexts: string[]): Promise<BatchValue[]> => {
       try {
         const result = await this.queueFor(service).enqueue(

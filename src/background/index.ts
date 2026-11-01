@@ -27,6 +27,7 @@ import {
   type BackgroundRequest,
   type ServiceInfo,
   type TranslateMessage,
+  type TranslateResultMessage,
 } from "../shared/messages";
 import type { Rule, ServiceConfig } from "../shared/types";
 import {
@@ -53,6 +54,7 @@ import {
 import { TranslateError, type TranslationService } from "./services/base";
 import { runServiceTest } from "./service-test";
 import { openSidePanel, sidePanelApi } from "./side-panel";
+import { requireProviderConsent } from "../shared/provider-consent";
 import { getChatgptModels } from "./services/chatgpt-oauth/service";
 import {
   cancelChatgptOauth,
@@ -115,6 +117,7 @@ async function configuredService(serviceId: string): Promise<{
 }> {
   const config = await loadConfig();
   const serviceConfig = config.services[serviceId];
+  await requireProviderConsent(serviceId, serviceConfig);
   if (serviceConfig?.enabled === false) {
     throw new TranslateError(
       "invalid_config",
@@ -173,6 +176,7 @@ async function runAssistantRequest(
 async function testService(serviceId: string, unsavedConfig?: ServiceConfig) {
   const config = await loadConfig();
   const serviceConfig = unsavedConfig ?? config.services[serviceId];
+  await requireProviderConsent(serviceId, serviceConfig);
   if (!serviceConfig) {
     return {
       ok: false as const,
@@ -186,12 +190,20 @@ async function testService(serviceId: string, unsavedConfig?: ServiceConfig) {
 }
 
 async function runTranslation(request: TranslateMessage, frameId = 0) {
+  const responses: TranslateResultMessage[] = [];
+  const deliveries: Promise<unknown>[] = [];
   await translate(request, (message) => {
-    void browser.tabs
-      .sendMessage(request.tabId, message, { frameId })
-      .catch(() => undefined);
+    responses.push(message);
+    deliveries.push(
+      browser.tabs
+        .sendMessage(request.tabId, message, { frameId })
+        .catch(() => undefined),
+    );
   });
-  return { accepted: true };
+  // Keep the event page alive through delivery. Safari also receives a complete
+  // reply if a frame-targeted push is dropped while the page is waking.
+  await Promise.allSettled(deliveries);
+  return { accepted: true, responses };
 }
 
 browser.runtime.onMessage.addListener(
@@ -388,7 +400,7 @@ async function dispatchPageCommand(
   );
 }
 
-browser.commands.onCommand.addListener((command) => {
+browser.commands?.onCommand?.addListener((command) => {
   void routeExtensionCommand(command, {
     async getActiveTabId() {
       const [tab] = await browser.tabs.query({
@@ -408,7 +420,7 @@ browser.commands.onCommand.addListener((command) => {
   }).catch(() => undefined);
 });
 
-browser.contextMenus.onClicked.addListener((info, tab) => {
+browser.contextMenus?.onClicked?.addListener((info, tab) => {
   void routeContextMenuClick(info, tab, {
     sendControllerCommand: (tabId, command) =>
       dispatchPageCommand(command, tabId),
@@ -439,11 +451,12 @@ browser.runtime.onInstalled.addListener(() => {
     await sidePanelApi()?.setPanelBehavior({
       openPanelOnActionClick: false,
     });
-    await createContextMenus(
-      browser.contextMenus as unknown as Parameters<
-        typeof createContextMenus
-      >[0],
-    );
+    if (browser.contextMenus)
+      await createContextMenus(
+        browser.contextMenus as unknown as Parameters<
+          typeof createContextMenus
+        >[0],
+      );
   })().catch((error: unknown) => {
     console.error("[imt] Installation setup failed", error);
   });

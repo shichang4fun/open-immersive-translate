@@ -2,6 +2,7 @@ import browser from "webextension-polyfill";
 
 import { sendToBackground } from "../../shared/messages";
 import { downloadTranslationHistory } from "../../shared/translation-history";
+import { isIOSBuild } from "../../shared/platform";
 import type { FeatureContext } from "./context";
 
 export const FLOAT_BALL_POSITION_KEY = "floatBallPos";
@@ -95,7 +96,7 @@ export function init(ctx: FeatureContext): () => void {
       <button type="button" role="menuitem" data-action="translation-only">仅译文</button>
       <button type="button" role="menuitem" data-action="history-jsonl">导出翻译记录 JSONL</button>
       <button type="button" role="menuitem" data-action="history-csv">导出翻译记录 CSV</button>
-      <button type="button" role="menuitem" data-action="weekly-backup">立即保存每周备份</button>
+      ${isIOSBuild() ? "" : '<button type="button" role="menuitem" data-action="weekly-backup">立即保存每周备份</button>'}
       <button type="button" role="menuitem" data-action="never-site">从不翻译此站</button>
     </div>
   `;

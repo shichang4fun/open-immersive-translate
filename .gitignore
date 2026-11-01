@@ -2,7 +2,12 @@ node_modules/
 dist/
 dist-firefox/
 dist-safari/
+dist-safari-ios/
 build-safari/
+build-safari-ios/
+native/ios/*.xcodeproj/
+native/ios/App/Info.plist
+native/ios/Extension/Info.plist
 dist-userscript/
 .vite/
 playwright-report/

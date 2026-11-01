@@ -1,6 +1,6 @@
 # macOS Safari 版本
 
-Safari 版本复用本项目的翻译、设置、ChatGPT 设备码授权、翻译历史和视频字幕代码，单独生成 Safari Web Extension 与包含它的 macOS 应用。当前只提供 macOS 构建；不包含 iPhone/iPad 版。
+Safari 版本复用本项目的翻译、设置、ChatGPT 设备码授权、翻译历史和视频字幕代码，单独生成 Safari Web Extension 与包含它的 macOS 应用。本页介绍 macOS；移动版本见 [iPhone/iPad 构建与使用](IOS.md)。
 
 ## 构建
 

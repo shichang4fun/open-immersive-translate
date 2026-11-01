@@ -11,13 +11,13 @@
 }
 html,
 body {
-  width: 380px;
+  width: min(380px, 100vw);
   font-size: 14px;
 }
 .popup-shell {
   display: grid;
   gap: 14px;
-  width: 380px;
+  width: 100%;
   padding: 20px;
   background: var(--ui-bg);
 }
