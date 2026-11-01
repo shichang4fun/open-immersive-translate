@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "build:safari": "vite build --config vite.safari.config.ts && node scripts/check-safari.mjs",
+    "build:safari:ios": "vite build --config vite.safari.config.ts --mode ios && node scripts/check-safari.mjs --ios",
+    "package:safari:ios": "node scripts/package-safari-ios.mjs",
     "package:safari": "node scripts/package-safari.mjs",
     "e2e": "node scripts/run-e2e.mjs",
     "test": "vitest run",

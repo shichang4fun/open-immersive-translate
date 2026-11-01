@@ -237,3 +237,24 @@ a {
 .ui-status-error {
   color: var(--ui-danger);
 }
+html[data-imt-platform="ios"] {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+html[data-imt-platform="ios"] button,
+html[data-imt-platform="ios"] input,
+html[data-imt-platform="ios"] select,
+html[data-imt-platform="ios"] textarea {
+  font-size: 16px;
+  min-height: 44px;
+}
+html[data-imt-platform="ios"] .provider-consent {
+  padding: 16px;
+  border: 1px solid var(--ui-border);
+  border-radius: 16px;
+}
+html[data-imt-platform="ios"] .provider-consent p {
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}

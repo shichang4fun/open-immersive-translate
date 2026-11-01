@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { transformSafariManifest } from "../../vite.safari.config";
 
 describe("Safari manifest", () => {
+  it("omits desktop-only menus and shortcuts on iPhone", () => {
+    const source = {
+      permissions: ["storage", "contextMenus", "sidePanel", "webRequest"],
+      commands: { translate: { description: "Translate" } },
+      background: { service_worker: "worker.ts" },
+    };
+    const manifest = transformSafariManifest(source, true);
+    expect(manifest.permissions).toEqual(["storage", "unlimitedStorage"]);
+    expect(manifest).not.toHaveProperty("commands");
+    expect(source.commands).toHaveProperty("translate");
+  });
   it("removes unsupported Chrome features before bundling the background entry", () => {
     const source = {
       manifest_version: 3,

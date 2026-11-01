@@ -2,7 +2,7 @@
 
 本仓库是由 [shichang4fun](https://github.com/shichang4fun) 独立维护的开源双语翻译扩展，**直接 fork 自 [ymcwiki/open-immersive-translate](https://github.com/ymcwiki/open-immersive-translate)**，沿用 MIT 许可证。感谢原作者 ymcwiki 及上游贡献者提供的代码与文档基础。
 
-它按段落提取网页正文，在原文旁显示译文，并支持 ChatGPT 账号授权翻译、PDF、视频字幕和多种翻译服务。首次安装默认使用免密钥的 Google 翻译服务，目标语言为简体中文。支持构建 Chromium、macOS Safari、Firefox 扩展和油猴脚本；各平台验证范围见 [功能对照](docs/FEATURE_PARITY.md) 与 [Safari 说明](docs/SAFARI.md)。
+它按段落提取网页正文，在原文旁显示译文，并支持 ChatGPT 账号授权翻译、PDF、视频字幕和多种翻译服务。首次安装默认使用免密钥的 Google 翻译服务，目标语言为简体中文。支持构建 Chromium、macOS Safari、iPhone/iPad Safari、Firefox 扩展和油猴脚本；各平台验证范围见 [功能对照](docs/FEATURE_PARITY.md)、[macOS Safari 说明](docs/SAFARI.md) 与 [iPhone/iPad 说明](docs/IOS.md)。
 
 ## 项目来源与引用声明
 
@@ -141,6 +141,19 @@ pnpm package:safari
 ```
 
 需要 macOS 和完整 Xcode。应用位于 `build-safari/DerivedData/Build/Products/Release/Bilingual Translator.app`，打开后在 Safari 设置的“扩展”中启用。签名、开发模式和平台差异见 [Safari 构建与安装](docs/SAFARI.md)。
+
+## 在 iPhone/iPad Safari 中使用
+
+移动版使用同一套扩展代码，搭配 SwiftUI 引导 App。构建命令：
+
+```bash
+pnpm package:safari:ios
+open native/ios/BilingualTranslator.xcodeproj
+```
+
+在 Xcode 中选择自己的开发团队与 iPhone 模拟器或设备，运行 `BilingualTranslator`。安装后在“设置 → App → Safari 浏览器 → 扩展”启用；允许当前网站访问，并同意向所选服务发送文本后再翻译。移动版不包含维护者账号或任何第三方订阅，需要自行授权 ChatGPT 或配置服务。
+
+App Store 版本正在准备，尚未公开上架。移动端构建、功能差异和验证边界见 [iPhone/iPad 说明](docs/IOS.md)，数据处理方式见 [隐私政策](docs/PRIVACY.md)。
 
 ## 配置 OpenAI 兼容服务
 

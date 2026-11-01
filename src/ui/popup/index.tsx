@@ -2,6 +2,7 @@ import { render } from "preact";
 import { useEffect, useRef, useState } from "preact/hooks";
 import browser from "webextension-polyfill";
 import { shortcutsUrl } from "../shared/platform";
+import { ProviderConsent } from "../shared/provider-consent";
 
 import { LANGUAGE_CODES } from "../../shared/lang";
 import { sendToBackground, sendToTab } from "../../shared/messages";
@@ -182,6 +183,11 @@ export function Popup(): preact.JSX.Element {
           </svg>
         </button>
       </header>
+
+      <ProviderConsent
+        serviceId={config.service}
+        service={config.services[config.service]}
+      />
 
       <Button
         variant="primary"

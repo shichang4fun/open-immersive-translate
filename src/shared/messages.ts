@@ -382,6 +382,7 @@ export type BackgroundRequest =
 export interface TranslateAcknowledgement {
   accepted: boolean;
   error?: TranslateError;
+  responses?: TranslateResultMessage[];
 }
 
 /** Acknowledgement for cancellation requests. */
@@ -533,7 +534,13 @@ export function connectTranslatePort(): ContentTranslatePort {
 }
 
 function connectSafariTranslation(): ContentTranslatePort {
-  const requests = new Map<string, TranslatePortMessage>();
+  const requests = new Map<
+    string,
+    {
+      request: TranslatePortMessage;
+      received: Set<string>;
+    }
+  >();
   const listeners = new Set<(message: TranslatePortResponse) => void>();
   let disconnected = false;
   const receive = (value: unknown): void => {
@@ -544,39 +551,59 @@ function connectSafariTranslation(): ContentTranslatePort {
       !requests.has(message.requestId)
     )
       return;
+    const state = requests.get(message.requestId)!;
+    if (!Array.isArray(message.results)) return;
+    const results = message.results.filter(
+      (result) => !state.received.has(result.id),
+    );
+    for (const result of results) state.received.add(result.id);
+    const done =
+      message.done === true &&
+      state.request.paragraphs.every(({ id }) => state.received.has(id));
+    // A premature terminal push must not discard the reliable reply below.
+    if (!results.length && !done) return;
     for (const listener of listeners)
-      listener(message as TranslatePortResponse);
-    if (message.done) requests.delete(message.requestId);
+      listener({ ...message, results, done } as TranslatePortResponse);
+    if (done) requests.delete(message.requestId);
   };
   browser.runtime.onMessage.addListener(receive);
   return {
     postMessage(message) {
       if (disconnected) throw new Error("Translation channel is disconnected.");
       if (message.type === "translate")
-        requests.set(message.requestId, message);
+        requests.set(message.requestId, {
+          request: message,
+          received: new Set(),
+        });
       else if (message.requestId) requests.delete(message.requestId);
       else requests.clear();
-      void browser.runtime.sendMessage(message).catch((error: unknown) => {
-        if (
-          disconnected ||
-          message.type !== "translate" ||
-          !requests.has(message.requestId)
-        )
-          return;
-        receive({
-          type: "translateResult",
-          requestId: message.requestId,
-          done: true,
-          results: message.paragraphs.map(({ id }) => ({
-            id,
-            error: {
-              code: "network",
-              message: error instanceof Error ? error.message : String(error),
-              retryable: true,
-            },
-          })),
+      void browser.runtime
+        .sendMessage(message)
+        .then((value: unknown) => {
+          const reply = value as TranslateAcknowledgement | undefined;
+          for (const response of reply?.responses ?? []) receive(response);
+        })
+        .catch((error: unknown) => {
+          if (
+            disconnected ||
+            message.type !== "translate" ||
+            !requests.has(message.requestId)
+          )
+            return;
+          receive({
+            type: "translateResult",
+            requestId: message.requestId,
+            done: true,
+            results: message.paragraphs.map(({ id }) => ({
+              id,
+              error: {
+                code: "network",
+                message: error instanceof Error ? error.message : String(error),
+                retryable: true,
+              },
+            })),
+          });
         });
-      });
     },
     onMessage(listener) {
       listeners.add(listener);

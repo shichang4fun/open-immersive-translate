@@ -19,6 +19,7 @@ import {
 } from "../shared/i18n";
 import { useKConfig } from "../shared/k-config";
 import "../shared/styles.css";
+import "../shared/platform";
 import "./sidepanel.css";
 
 const HISTORY_KEY = "kSidePanelHistory";

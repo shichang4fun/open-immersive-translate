@@ -3,12 +3,20 @@ import { readFile } from "node:fs/promises";
 import { Script } from "node:vm";
 import { URL } from "node:url";
 import console from "node:console";
+import process from "node:process";
 
-const root = new URL("../dist-safari/", import.meta.url);
+const ios = process.argv.includes("--ios");
+const root = new URL(
+  ios ? "../dist-safari-ios/" : "../dist-safari/",
+  import.meta.url,
+);
 const manifest = JSON.parse(
   await readFile(new URL("manifest.json", root), "utf8"),
 );
-assert.deepEqual(manifest.background, { page: "background.html" });
+assert.deepEqual(manifest.background, {
+  page: "background.html",
+  ...(ios ? { persistent: false } : {}),
+});
 const background = await readFile(new URL("background.html", root), "utf8");
 assert(background.includes('charset="utf-8"'));
 assert(background.includes('<script src="background.js"></script>'));
@@ -16,6 +24,10 @@ assert(!background.includes('type="module"'));
 assert(!manifest.permissions.includes("sidePanel"));
 assert(!manifest.permissions.includes("webRequest"));
 assert(!("side_panel" in manifest));
+if (ios) {
+  assert(!manifest.permissions.includes("contextMenus"));
+  assert(!("commands" in manifest));
+}
 for (const resource of manifest.web_accessible_resources) {
   assert(!("use_dynamic_url" in resource));
 }
