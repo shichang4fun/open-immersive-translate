@@ -43,7 +43,8 @@ Safari 的设置、账号授权、历史记录与 Chrome/Arc 隔离，需要在 
 
 | 功能 | Safari 处理方式 |
 | --- | --- |
-| 后台 | MV3 非持久后台页面，以模块脚本加载；保留 alarms 与本地存储恢复机制。 |
+| 后台 | MV3 非持久后台，使用独立 IIFE 脚本同步注册事件，避免后台唤醒时丢失首次连接；保留 alarms 与本地存储恢复机制。 |
+| 翻译通信 | 使用普通消息唤醒后台，并按原标签页和 frame 逐段回传结果，避免复用后台休眠后失效的长连接。后台投递失败会显示错误，可重试。 |
 | 侧边栏 | Safari 无 Chrome sidePanel API，以独立窗口显示翻译助手，关联打开它的原网页。 |
 | PDF 自动接管 | 保留 `.pdf` 链接检测和手动打开 PDF；不申请 webRequest 权限，不按响应 Content-Type 自动接管无后缀 PDF。 |
 | 快捷键 | 可查看 Safari 报告的绑定；不打开 Chrome 的快捷键管理网址。 |
@@ -61,5 +62,7 @@ pnpm package:safari
 ```
 
 这些检查验证构建、平台分支和共用逻辑。Chromium 的端到端测试不能代替 Safari 实站验收。首次启用后应分别验证普通网页双语/恢复原文、设置持久化、ChatGPT 授权、YouTube 字幕与历史导出。
+
+本机 Safari 已实测 `example.com` 的 Google Translate 简体中文翻译、恢复原文、连续重复翻译，以及切换到 Safari 设置并空闲后再次翻译。权限为仅允许 `example.com`，其他网站保持询问，测试结束时恢复原文。这一验收不覆盖 ChatGPT 授权、PDF 和第三方视频字幕。
 
 参考：[Apple 打包指南](https://developer.apple.com/documentation/safariservices/packaging-a-web-extension-for-safari)、[运行与启用](https://developer.apple.com/documentation/safariservices/running-your-safari-web-extension)、[浏览器兼容性](https://developer.apple.com/documentation/safariservices/assessing-your-safari-web-extension-s-browser-compatibility)。

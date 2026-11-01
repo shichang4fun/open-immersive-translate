@@ -8,6 +8,7 @@ const controllerStorage = vi.hoisted(() => ({
 }));
 const browserMock = vi.hoisted(() => ({
   runtime: {
+    getURL: (path: string) => `chrome-extension://test/${path}`,
     sendMessage: vi.fn().mockResolvedValue({ saved: true }),
     connect: vi.fn(() => ({
       postMessage: vi.fn((message: unknown) => portPosts.push(message)),

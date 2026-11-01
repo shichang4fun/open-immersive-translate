@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:safari": "vite build --config vite.safari.config.ts",
+    "build:safari": "vite build --config vite.safari.config.ts && node scripts/check-safari.mjs",
     "package:safari": "node scripts/package-safari.mjs",
     "e2e": "node scripts/run-e2e.mjs",
     "test": "vitest run",

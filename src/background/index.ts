@@ -185,10 +185,13 @@ async function testService(serviceId: string, unsavedConfig?: ServiceConfig) {
   });
 }
 
-function runTranslation(request: TranslateMessage): void {
-  void translate(request, (message) => {
-    void sendToTab(request.tabId, message).catch(() => undefined);
+async function runTranslation(request: TranslateMessage, frameId = 0) {
+  await translate(request, (message) => {
+    void browser.tabs
+      .sendMessage(request.tabId, message, { frameId })
+      .catch(() => undefined);
   });
+  return { accepted: true };
 }
 
 browser.runtime.onMessage.addListener(
@@ -213,10 +216,12 @@ browser.runtime.onMessage.addListener(
       case "setConfig":
         return saveConfig(request.patch);
       case "translate":
-        runTranslation(request);
-        return Promise.resolve({ accepted: true });
+        return runTranslation(
+          { ...request, tabId: sender.tab?.id ?? request.tabId },
+          sender.frameId,
+        );
       case "cancel":
-        cancel(request.tabId, request.requestId);
+        cancel(sender.tab?.id ?? request.tabId, request.requestId);
         return Promise.resolve({ cancelled: true });
       case "getServices":
         return serviceList();

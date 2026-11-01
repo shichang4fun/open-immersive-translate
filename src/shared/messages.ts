@@ -522,9 +522,77 @@ function wrapPort<Outbound, Inbound>(
 
 /** Open the content-side port used for streamed translation results. */
 export function connectTranslatePort(): ContentTranslatePort {
+  // Safari can unload its event page without disconnecting existing Ports.
+  // One-off messages wake it reliably; results still arrive incrementally.
+  if (browser.runtime.getURL("").startsWith("safari-web-extension:")) {
+    return connectSafariTranslation();
+  }
   return wrapPort<TranslatePortRequest, TranslatePortResponse>(
     browser.runtime.connect({ name: TRANSLATE_PORT_NAME }),
   );
+}
+
+function connectSafariTranslation(): ContentTranslatePort {
+  const requests = new Map<string, TranslatePortMessage>();
+  const listeners = new Set<(message: TranslatePortResponse) => void>();
+  let disconnected = false;
+  const receive = (value: unknown): void => {
+    const message = value as Partial<TranslatePortResponse> | null;
+    if (
+      message?.type !== "translateResult" ||
+      !message.requestId ||
+      !requests.has(message.requestId)
+    )
+      return;
+    for (const listener of listeners)
+      listener(message as TranslatePortResponse);
+    if (message.done) requests.delete(message.requestId);
+  };
+  browser.runtime.onMessage.addListener(receive);
+  return {
+    postMessage(message) {
+      if (disconnected) throw new Error("Translation channel is disconnected.");
+      if (message.type === "translate")
+        requests.set(message.requestId, message);
+      else if (message.requestId) requests.delete(message.requestId);
+      else requests.clear();
+      void browser.runtime.sendMessage(message).catch((error: unknown) => {
+        if (
+          disconnected ||
+          message.type !== "translate" ||
+          !requests.has(message.requestId)
+        )
+          return;
+        receive({
+          type: "translateResult",
+          requestId: message.requestId,
+          done: true,
+          results: message.paragraphs.map(({ id }) => ({
+            id,
+            error: {
+              code: "network",
+              message: error instanceof Error ? error.message : String(error),
+              retryable: true,
+            },
+          })),
+        });
+      });
+    },
+    onMessage(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    // There is no long-lived native connection to reconnect in Safari.
+    onDisconnect: () => () => undefined,
+    disconnect() {
+      disconnected = true;
+      browser.runtime.onMessage.removeListener(receive);
+      listeners.clear();
+      requests.clear();
+    },
+  };
 }
 
 /** Subscribe to background-side translation ports; returns an unsubscribe function. */

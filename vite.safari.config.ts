@@ -1,7 +1,7 @@
 import { crx, type ManifestV3Export } from "@crxjs/vite-plugin";
 import { fileURLToPath } from "node:url";
 import { readFile, writeFile } from "node:fs/promises";
-import { defineConfig, type Plugin } from "vite";
+import { build as viteBuild, defineConfig, type Plugin } from "vite";
 
 import chromeManifest from "./src/manifest.ts";
 
@@ -15,7 +15,7 @@ export function transformSafariManifest(source: Record<string, unknown>) {
     ),
     "unlimitedStorage",
   ];
-  // Let CRX bundle the background entry; wrap its module loader below for Safari.
+  // Let CRX resolve the entry; emit a synchronous classic bundle below for Safari.
   const background = source.background as { service_worker: string };
   manifest.background = {
     scripts: [background.service_worker],
@@ -45,12 +45,30 @@ export default defineConfig(async (env) => {
         async writeBundle(options) {
           const path = `${options.dir}/manifest.json`;
           const manifest = JSON.parse(await readFile(path, "utf8"));
-          const scripts = manifest.background.scripts as string[];
+          // Safari must register onConnect synchronously when its event page
+          // wakes. A module script in background.html can miss that first event.
+          await viteBuild({
+            configFile: false,
+            mode: env.mode,
+            logLevel: "warn",
+            build: {
+              outDir: options.dir,
+              emptyOutDir: false,
+              lib: {
+                entry: fileURLToPath(
+                  new URL("./src/background/worker.ts", import.meta.url),
+                ),
+                formats: ["iife"],
+                name: "BilingualTranslatorBackground",
+                fileName: () => "background.js",
+              },
+            },
+          });
           await writeFile(
             `${options.dir}/background.html`,
-            `<!doctype html><meta charset="utf-8">${scripts.map((script) => `<script type="module" src="${script}"></script>`).join("")}\n`,
+            '<!doctype html><meta charset="utf-8"><script src="background.js"></script>\n',
           );
-          // MV3 background pages are nonpersistent by definition in Safari.
+          // MV3 background scripts are nonpersistent by definition in Safari.
           manifest.background = { page: "background.html" };
           for (const resource of manifest.web_accessible_resources ?? []) {
             delete resource.use_dynamic_url;

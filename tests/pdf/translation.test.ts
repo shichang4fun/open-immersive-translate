@@ -26,6 +26,7 @@ const rawPort = vi.hoisted(() => ({
 
 const browserMock = vi.hoisted(() => ({
   runtime: {
+    getURL: (path: string) => `chrome-extension://test/${path}`,
     connect: vi.fn(() => rawPort),
     onConnect: { addListener: vi.fn(), removeListener: vi.fn() },
   },
