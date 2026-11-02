@@ -153,7 +153,7 @@ open native/ios/BilingualTranslator.xcodeproj
 
 在 Xcode 中选择自己的开发团队与 iPhone 模拟器或设备，运行 `BilingualTranslator`。安装后在“设置 → App → Safari 浏览器 → 扩展”启用；允许当前网站访问，并同意向所选服务发送文本后再翻译。移动版不包含维护者账号或任何第三方订阅，需要自行授权 ChatGPT 或配置服务。
 
-App Store 版本正在准备，尚未公开上架。移动端构建、功能差异和验证边界见 [iPhone/iPad 说明](docs/IOS.md)，数据处理方式见 [隐私政策](docs/PRIVACY.md)。
+App Store 版本 1.0.0（Build 3）已于 2026-11-02 提交 Apple 审核，当前等待审核，尚未公开上架。移动端构建、功能差异和验证边界见 [iPhone/iPad 说明](docs/IOS.md)，数据处理方式见 [隐私政策](docs/PRIVACY.md)。
 
 ## 配置 OpenAI 兼容服务
 

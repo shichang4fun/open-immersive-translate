@@ -4,7 +4,7 @@
 
 ## 安装和使用
 
-App Store 条目已创建，当前仍在准备提交，尚未公开上架。开发构建可通过 Xcode 安装到自己的设备；模拟器产物不能直接安装到 iPhone。
+App Store 版本 1.0.0（Build 3）已于 2026-11-02 提交 Apple 审核，状态为 Waiting for Review。发行地区设置为美国和中国大陆，价格免费；这不代表已经获批或公开上架，中国大陆可用性仍以 Apple 审核及适用资质要求为准。开发构建可通过 Xcode 安装到自己的设备；模拟器产物不能直接安装到 iPhone。
 
 1. 打开“设置 → App → Safari 浏览器 → 扩展”，启用 Bilingual Translator。
 2. 在 Safari 页面菜单中打开“管理扩展”，按需将 Bilingual Translator 加入菜单。
